@@ -3,18 +3,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
-#include <thread>
-#include <set>
-#include <map>
 #include "Socket.hh"
+#include "Config.hh"
 
 using namespace std;
 
 class Datanode{
   private:
-    Socket* cn2dnSoc;
-    Socket* dn2dnSoc;
+    Config *conf;
+    Socket *cn2dnSoc;
+    Socket *dn2dnSoc;
     string cn_ip;
     string gw_ip;
     string data_path;
@@ -37,10 +35,9 @@ class Datanode{
     void analysisDowncodeCmd(char* newCmd, int newCmdLen);
     void analysisGWCmd(char* newCmd, int newCmdLen);
     void sendAck(string ack);
-    string normalizeIP(string Ip);
 
   public:
-    Datanode(Socket*, Socket*);
+    Datanode(Config*, Socket*, Socket*);
     ~Datanode();
 
       // receive commands from CN

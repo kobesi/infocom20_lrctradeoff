@@ -1,586 +1,26 @@
 #include "Metadata.hh"
 
-  // example topology configuration for k = 4, l = 2, g = 2 -> k = 4, l' = 1, g = 2
-void Metadata::setRackDN_k4() {
-  string rack1 = "/rack1";
-  string rack2 = "/rack2";
-  string rack3 = "/rack3";
-  string rack4 = "/rack4";
-  string rack5 = "/rack5";
-  string rack6 = "/rack6";
-  string gbrack1 = "/gbrack1"; // racks that will store the globla parity blocks
-  string gbrack2 = "/gbrack2";
-
-  string node1 = normalizeDNIP("192.168.0.12");
-  string node2 = normalizeDNIP("192.168.0.13");
-  string node3 = normalizeDNIP("192.168.0.14");
-  string node4 = normalizeDNIP("192.168.0.15");
-  string node5 = normalizeDNIP("192.168.0.24");
-  string node6 = normalizeDNIP("192.168.0.25");
-  string node7 = normalizeDNIP("192.168.0.26");
-  string gbnode1 = normalizeDNIP("192.168.0.10");
-  string gbnode2 = normalizeDNIP("192.168.0.11");
-
-  _gateWay = normalizeDNIP("192.168.0.28");
-
-  if(place_method == 1 || place_method == 2) {
-    _racks.insert(rack1);
-    _racks.insert(rack2);
-    _racks.insert(gbrack1);
-
-    set<string> dns;
-    dns.clear();
-    dns.insert(node1);
-    dns.insert(node2);
-    dns.insert(node3);
-    dns.insert(node4);
-    _rack2dn.insert(make_pair(rack1, dns));
-    dns.clear();
-    dns.insert(node5);
-    dns.insert(node6);
-    dns.insert(node7);
-    _rack2dn.insert(make_pair(rack2, dns));
-    dns.clear();
-    dns.insert(gbnode1);
-    _rack2dn.insert(make_pair(gbrack1, dns));
-
-    _dn2rack.insert(pair<string, string>(node1, rack1));
-    _dn2rack.insert(pair<string, string>(node2, rack1));
-    _dn2rack.insert(pair<string, string>(node3, rack1));
-    _dn2rack.insert(pair<string, string>(node4, rack1));
-    _dn2rack.insert(pair<string, string>(node5, rack2));
-    _dn2rack.insert(pair<string, string>(node6, rack2));
-    _dn2rack.insert(pair<string, string>(node7, rack2));
-    _dn2rack.insert(pair<string, string>(gbnode1, gbrack1));
-  } else {
-    _racks.insert(rack1);
-    _racks.insert(rack2);
-    _racks.insert(rack3);
-    _racks.insert(rack4);
-    _racks.insert(rack5);
-    _racks.insert(rack6);
-    _racks.insert(gbrack1);
-    _racks.insert(gbrack2);
-
-    set<string> dns;
-    dns.clear();
-    dns.insert(node1);
-    _rack2dn.insert(make_pair(rack1, dns));
-    dns.clear();
-    dns.insert(node2);
-    _rack2dn.insert(make_pair(rack2, dns));
-    dns.clear();
-    dns.insert(node3);
-    _rack2dn.insert(make_pair(rack3, dns));
-    dns.clear();
-    dns.insert(node4);
-    _rack2dn.insert(make_pair(rack4, dns));
-    dns.clear();
-    dns.insert(node5);
-    _rack2dn.insert(make_pair(rack5, dns));
-    dns.clear();
-    dns.insert(node6);
-    _rack2dn.insert(make_pair(rack6, dns));
-    dns.clear();
-    dns.insert(gbnode1);
-    _rack2dn.insert(make_pair(gbrack1, dns));
-    dns.clear();
-    dns.insert(gbnode2);
-    _rack2dn.insert(make_pair(gbrack2, dns));
-
-    _dn2rack.insert(pair<string, string>(node1, rack1));
-    _dn2rack.insert(pair<string, string>(node2, rack2));
-    _dn2rack.insert(pair<string, string>(node3, rack3));
-    _dn2rack.insert(pair<string, string>(node4, rack4));
-    _dn2rack.insert(pair<string, string>(node5, rack5));
-    _dn2rack.insert(pair<string, string>(node6, rack6));
-    _dn2rack.insert(pair<string, string>(gbnode1, gbrack1));
-    _dn2rack.insert(pair<string, string>(gbnode2, gbrack2));
-  }
-
-}
-
-  // example topology configuration for k = 8, l = 4, g = 2 -> k = 8, l' = 2, g = 2
-void Metadata::setRackDN_k8() {
-  string rack1 = "/rack1";
-  string rack2 = "/rack2";
-  string rack3 = "/rack3";
-  string rack4 = "/rack4";
-  string rack5 = "/rack5";
-  string rack6 = "/rack6";
-  string rack7 = "/rack7";
-  string rack8 = "/rack8";
-  string rack9 = "/rack9";
-  string rack10 = "/rack10";
-  string rack11 = "/rack11";
-  string rack12 = "/rack12";
-  string gbrack1 = "/gbrack1";
-  string gbrack2 = "/gbrack2";
-
-  string node2 = normalizeDNIP("192.168.0.12");
-  string node3 = normalizeDNIP("192.168.0.13");
-  string node4 = normalizeDNIP("192.168.0.14");
-  string node5 = normalizeDNIP("192.168.0.15");
-  string node6 = normalizeDNIP("192.168.0.16");
-  string node7 = normalizeDNIP("192.168.0.17");
-  string node8 = normalizeDNIP("192.168.0.18");
-  string node9 = normalizeDNIP("192.168.0.19");
-  string node12 = normalizeDNIP("192.168.0.22");
-  string node13 = normalizeDNIP("192.168.0.23");
-  string node14 = normalizeDNIP("192.168.0.24");
-  string node15 = normalizeDNIP("192.168.0.25");
-  string node16 = normalizeDNIP("192.168.0.26");
-  string node17 = normalizeDNIP("192.168.0.27");
-  string node20 = normalizeDNIP("192.168.0.30");
-  string node21 = normalizeDNIP("192.168.0.31");
-  string node23 = normalizeDNIP("192.168.0.33");
-  string node24 = normalizeDNIP("192.168.0.34");
-  string node37 = normalizeDNIP("192.168.0.47");
-  string node38 = normalizeDNIP("192.168.0.48");
-  string node39 = normalizeDNIP("192.168.0.49");
-  string gbnode1 = normalizeDNIP("192.168.0.10");
-  string gbnode2 = normalizeDNIP("192.168.0.11");
-
-  _gateWay = normalizeDNIP("192.168.0.28");
-
-  if(place_method == 1 || place_method == 2) {
-    _racks.insert(rack1);
-    _racks.insert(rack2);
-    _racks.insert(rack3);
-    _racks.insert(rack4);
-    _racks.insert(gbrack1);
-
-    set<string> dns;
-    dns.clear();
-    dns.insert(node2);
-    dns.insert(node3);
-    dns.insert(node4);
-    dns.insert(node5);
-    _rack2dn.insert(make_pair(rack1, dns));
-    dns.clear();
-    dns.insert(node6);
-    dns.insert(node7);
-    dns.insert(node8);
-    dns.insert(node9);
-    _rack2dn.insert(make_pair(rack2, dns));
-    dns.clear();
-    dns.insert(node12);
-    dns.insert(node13);
-    dns.insert(node14);
-    _rack2dn.insert(make_pair(rack3, dns));
-    dns.clear();
-    dns.insert(node15);
-    dns.insert(node16);
-    dns.insert(node17);
-    _rack2dn.insert(make_pair(rack4, dns));
-    dns.clear();
-    dns.insert(gbnode1);
-    _rack2dn.insert(make_pair(gbrack1, dns));
-
-    _dn2rack.insert(pair<string, string>(node2, rack1));
-    _dn2rack.insert(pair<string, string>(node3, rack1));
-    _dn2rack.insert(pair<string, string>(node4, rack1));
-    _dn2rack.insert(pair<string, string>(node5, rack1));
-    _dn2rack.insert(pair<string, string>(node6, rack2));
-    _dn2rack.insert(pair<string, string>(node7, rack2));
-    _dn2rack.insert(pair<string, string>(node8, rack2));
-    _dn2rack.insert(pair<string, string>(node9, rack2));
-    _dn2rack.insert(pair<string, string>(node12, rack3));
-    _dn2rack.insert(pair<string, string>(node13, rack3));
-    _dn2rack.insert(pair<string, string>(node14, rack3));
-    _dn2rack.insert(pair<string, string>(node15, rack4));
-    _dn2rack.insert(pair<string, string>(node16, rack4));
-    _dn2rack.insert(pair<string, string>(node17, rack4));
-    _dn2rack.insert(pair<string, string>(gbnode1, gbrack1));
-  } else {
-   _racks.insert(rack1);
-   _racks.insert(rack2);
-   _racks.insert(rack3);
-   _racks.insert(rack4);
-   _racks.insert(rack5);
-   _racks.insert(rack6);
-   _racks.insert(rack7);
-   _racks.insert(rack8);
-   _racks.insert(rack9);
-   _racks.insert(rack10);
-   _racks.insert(rack11);
-   _racks.insert(rack12);
-   _racks.insert(gbrack1);
-   _racks.insert(gbrack2);
-
-   set<string> dns;
-   dns.clear();
-   dns.insert(node2);
-   _rack2dn.insert(make_pair(rack1, dns));
-   dns.clear();
-   dns.insert(node3);
-   _rack2dn.insert(make_pair(rack2, dns));
-   dns.clear();
-   dns.insert(node4);
-   _rack2dn.insert(make_pair(rack3, dns));
-   dns.clear();
-   dns.insert(node5);
-   _rack2dn.insert(make_pair(rack4, dns));
-   dns.clear();
-   dns.insert(node6);
-   _rack2dn.insert(make_pair(rack5, dns));
-   dns.clear();
-   dns.insert(node7);
-   _rack2dn.insert(make_pair(rack6, dns));
-   dns.clear();
-   dns.insert(node8);
-   _rack2dn.insert(make_pair(rack7, dns));
-   dns.clear();
-   dns.insert(node9);
-   _rack2dn.insert(make_pair(rack8, dns));
-   dns.clear();
-   dns.insert(node12);
-   _rack2dn.insert(make_pair(rack9, dns));
-   dns.clear();
-   dns.insert(node13);
-   _rack2dn.insert(make_pair(rack10, dns));
-   dns.clear();
-   dns.insert(node14);
-   _rack2dn.insert(make_pair(rack11, dns));
-   dns.clear();
-   dns.insert(node15);
-   _rack2dn.insert(make_pair(rack12, dns));
-    dns.clear();
-   dns.insert(gbnode1);
-   _rack2dn.insert(make_pair(gbrack1, dns));
-   dns.clear();
-   dns.insert(gbnode2);
-   _rack2dn.insert(make_pair(gbrack2, dns));
-
-   _dn2rack.insert(pair<string, string>(node2, rack1));
-   _dn2rack.insert(pair<string, string>(node3, rack2));
-   _dn2rack.insert(pair<string, string>(node4, rack3));
-   _dn2rack.insert(pair<string, string>(node5, rack4));
-   _dn2rack.insert(pair<string, string>(node6, rack5));
-   _dn2rack.insert(pair<string, string>(node7, rack6));
-   _dn2rack.insert(pair<string, string>(node8, rack7));
-   _dn2rack.insert(pair<string, string>(node9, rack8));
-   _dn2rack.insert(pair<string, string>(node12, rack9));
-   _dn2rack.insert(pair<string, string>(node13, rack10));
-   _dn2rack.insert(pair<string, string>(node14, rack11));
-   _dn2rack.insert(pair<string, string>(node15, rack12));
-   _dn2rack.insert(pair<string, string>(gbnode1, gbrack1));
-   _dn2rack.insert(pair<string, string>(gbnode2, gbrack2));
-  }
-
-}
-
-  // example topology configuration for k = 12, l = 6, g = 2 -> k = 12, l' = 2, g = 2
-void Metadata::setRackDN_k12(){
-  string rack1 = "/rack1";
-  string rack2 = "/rack2";
-  string rack3 = "/rack3";
-  string rack4 = "/rack4";
-  string rack5 = "/rack5";
-  string rack6 = "/rack6";
-  string rack7 = "/rack7";
-  string rack8 = "/rack8";
-  string rack9 = "/rack9";
-  string rack10 = "/rack10";
-  string rack11 = "/rack11";
-  string rack12 = "/rack12";
-  string rack13 = "/rack13";
-  string rack14 = "/rack14";
-  string rack15 = "/rack15";
-  string rack16 = "/rack16";
-  string rack17 = "/rack17";
-  string rack18 = "/rack18";
-  string gbrack1 = "/gbrack1";
-  string gbrack2 = "/gbrack2";
-
-  string node2 = normalizeDNIP("192.168.0.12");
-  string node3 = normalizeDNIP("192.168.0.13");
-  string node4 = normalizeDNIP("192.168.0.14");
-  string node5 = normalizeDNIP("192.168.0.15");
-  string node6 = normalizeDNIP("192.168.0.16");
-  string node7 = normalizeDNIP("192.168.0.17");
-  string node8 = normalizeDNIP("192.168.0.18");
-  string node9 = normalizeDNIP("192.168.0.19");
-  string node12 = normalizeDNIP("192.168.0.22");
-  string node13 = normalizeDNIP("192.168.0.23");
-  string node14 = normalizeDNIP("192.168.0.24");
-  string node15 = normalizeDNIP("192.168.0.25");
-  string node16 = normalizeDNIP("192.168.0.26");
-  string node17 = normalizeDNIP("192.168.0.27");
-  string node20 = normalizeDNIP("192.168.0.30");
-  string node21 = normalizeDNIP("192.168.0.31");
-  string node23 = normalizeDNIP("192.168.0.33"); 
-  string node24 = normalizeDNIP("192.168.0.34");
-  string node37 = normalizeDNIP("192.168.0.47");
-  string node38 = normalizeDNIP("192.168.0.48");
-  string node39 = normalizeDNIP("192.168.0.49");
-  string gbnode1 = normalizeDNIP("192.168.0.10");
-  string gbnode2 = normalizeDNIP("192.168.0.11");
-
-  _gateWay = normalizeDNIP("192.168.0.28");
-
-  if(place_method == 1) {
-    _racks.insert(rack1);
-    _racks.insert(rack2);
-    _racks.insert(rack3);
-    _racks.insert(rack4);
-    _racks.insert(rack5);
-    _racks.insert(rack6);
-    _racks.insert(gbrack1);
-
-    set<string> dns;
-    dns.clear();
-    dns.insert(node2);
-    dns.insert(node3);
-    dns.insert(node4);
-    dns.insert(node5);
-    dns.insert(node6);
-    _rack2dn.insert(make_pair(rack1, dns));
-    dns.clear();
-    dns.insert(node7);
-    dns.insert(node8);
-    dns.insert(node9);
-    dns.insert(node12);
-    dns.insert(node13);
-    _rack2dn.insert(make_pair(rack2, dns));
-    dns.clear();
-    dns.insert(node14);
-    dns.insert(node15);
-    _rack2dn.insert(make_pair(rack3, dns));
-    dns.clear();
-    dns.insert(node16);
-    dns.insert(node17);
-    _rack2dn.insert(make_pair(rack4, dns));
-    dns.clear();
-    dns.insert(node20);
-    dns.insert(node21);
-    _rack2dn.insert(make_pair(rack5, dns));
-    dns.clear();
-    dns.insert(node23);
-    dns.insert(node24);
-    _rack2dn.insert(make_pair(rack6, dns));
-    dns.clear();
-    dns.insert(gbnode1);
-    _rack2dn.insert(make_pair(gbrack1, dns));
-
-    _dn2rack.insert(pair<string, string>(node2, rack1));
-    _dn2rack.insert(pair<string, string>(node3, rack1));
-    _dn2rack.insert(pair<string, string>(node4, rack1));
-    _dn2rack.insert(pair<string, string>(node5, rack1));
-    _dn2rack.insert(pair<string, string>(node6, rack1));
-    _dn2rack.insert(pair<string, string>(node7, rack2));
-    _dn2rack.insert(pair<string, string>(node8, rack2));
-    _dn2rack.insert(pair<string, string>(node9, rack2));
-    _dn2rack.insert(pair<string, string>(node12, rack2));
-    _dn2rack.insert(pair<string, string>(node13, rack2));
-    _dn2rack.insert(pair<string, string>(node14, rack3));
-    _dn2rack.insert(pair<string, string>(node15, rack3));
-    _dn2rack.insert(pair<string, string>(node16, rack4));
-    _dn2rack.insert(pair<string, string>(node17, rack4));
-    _dn2rack.insert(pair<string, string>(node20, rack5));
-    _dn2rack.insert(pair<string, string>(node21, rack5));
-    _dn2rack.insert(pair<string, string>(node23, rack6));
-    _dn2rack.insert(pair<string, string>(node24, rack6));
-    _dn2rack.insert(pair<string, string>(gbnode1, gbrack1));
-  } else if (place_method == 2) {
-    _racks.insert(rack1);
-    _racks.insert(rack2);
-    _racks.insert(rack3);
-    _racks.insert(rack4);
-    _racks.insert(rack5);
-    _racks.insert(rack6);
-    _racks.insert(gbrack1);
-
-    set<string> dns;
-    dns.clear();
-    dns.insert(node2);
-    dns.insert(node3);
-    dns.insert(node4);
-    _rack2dn.insert(make_pair(rack1, dns));
-    dns.clear();
-    dns.insert(node5);
-    dns.insert(node6);
-    dns.insert(node7);
-    _rack2dn.insert(make_pair(rack2, dns));
-    dns.clear();
-    dns.insert(node8);
-    dns.insert(node9);
-    dns.insert(node12);
-    _rack2dn.insert(make_pair(rack3, dns));
-    dns.clear();
-    dns.insert(node13);
-    dns.insert(node14);
-    dns.insert(node15);
-    _rack2dn.insert(make_pair(rack4, dns));
-    dns.clear();
-    dns.insert(node16);
-    dns.insert(node17);
-    dns.insert(node20);
-    _rack2dn.insert(make_pair(rack5, dns));
-    dns.clear();
-    dns.insert(node21);
-    dns.insert(node23);
-    dns.insert(node24);
-    _rack2dn.insert(make_pair(rack6, dns));
-    dns.clear();
-    dns.insert(gbnode1);
-    _rack2dn.insert(make_pair(gbrack1, dns));
-
-    _dn2rack.insert(pair<string, string>(node2, rack1));
-    _dn2rack.insert(pair<string, string>(node3, rack1));
-    _dn2rack.insert(pair<string, string>(node4, rack1));
-    _dn2rack.insert(pair<string, string>(node5, rack2));
-    _dn2rack.insert(pair<string, string>(node6, rack2));
-    _dn2rack.insert(pair<string, string>(node7, rack2));
-    _dn2rack.insert(pair<string, string>(node8, rack3));
-    _dn2rack.insert(pair<string, string>(node9, rack3));
-    _dn2rack.insert(pair<string, string>(node12, rack3));
-    _dn2rack.insert(pair<string, string>(node13, rack4));
-    _dn2rack.insert(pair<string, string>(node14, rack4));
-    _dn2rack.insert(pair<string, string>(node15, rack4));
-    _dn2rack.insert(pair<string, string>(node16, rack5));
-    _dn2rack.insert(pair<string, string>(node17, rack5));
-    _dn2rack.insert(pair<string, string>(node20, rack5));
-    _dn2rack.insert(pair<string, string>(node21, rack6));
-    _dn2rack.insert(pair<string, string>(node23, rack6));
-    _dn2rack.insert(pair<string, string>(node24, rack6));
-    _dn2rack.insert(pair<string, string>(gbnode1, gbrack1));
-  } else {
-    _racks.insert(rack1);
-    _racks.insert(rack2);
-    _racks.insert(rack3);
-    _racks.insert(rack4);
-    _racks.insert(rack5);
-    _racks.insert(rack6);
-    _racks.insert(rack7);
-    _racks.insert(rack8);
-    _racks.insert(rack9);
-    _racks.insert(rack10);
-    _racks.insert(rack11);
-    _racks.insert(rack12);
-    _racks.insert(rack13);
-    _racks.insert(rack14);
-    _racks.insert(rack15);
-    _racks.insert(rack16);
-    _racks.insert(rack17);
-    _racks.insert(rack18);
-    _racks.insert(gbrack1);
-    _racks.insert(gbrack2);
-
-    set<string> dns;
-    dns.clear();
-    dns.insert(node2);
-    _rack2dn.insert(make_pair(rack1, dns));
-    dns.clear();
-    dns.insert(node3);
-    _rack2dn.insert(make_pair(rack2, dns));
-    dns.clear();
-    dns.insert(node4);
-    _rack2dn.insert(make_pair(rack3, dns));
-    dns.clear();
-    dns.insert(node5);
-    _rack2dn.insert(make_pair(rack4, dns));
-    dns.clear();
-    dns.insert(node6);
-    _rack2dn.insert(make_pair(rack5, dns));
-    dns.clear();
-    dns.insert(node7);
-    _rack2dn.insert(make_pair(rack6, dns));
-    dns.clear();
-    dns.insert(node8);
-    _rack2dn.insert(make_pair(rack7, dns));
-    dns.clear();
-    dns.insert(node9);
-    _rack2dn.insert(make_pair(rack8, dns));
-    dns.clear();
-    dns.insert(node12);
-    _rack2dn.insert(make_pair(rack9, dns));
-    dns.clear();
-    dns.insert(node13);
-    _rack2dn.insert(make_pair(rack10, dns));
-    dns.clear();
-    dns.insert(node14);
-    _rack2dn.insert(make_pair(rack11, dns));
-    dns.clear();
-    dns.insert(node15);
-    _rack2dn.insert(make_pair(rack12, dns));
-    dns.clear();
-    dns.insert(node16);
-    _rack2dn.insert(make_pair(rack13, dns));
-    dns.clear();
-    dns.insert(node17);
-    _rack2dn.insert(make_pair(rack14, dns));
-    dns.clear();
-    dns.insert(node20);
-    _rack2dn.insert(make_pair(rack15, dns));
-    dns.clear();
-    dns.insert(node21);
-    _rack2dn.insert(make_pair(rack16, dns));
-    dns.clear();
-    dns.insert(node23);
-    _rack2dn.insert(make_pair(rack17, dns));
-    dns.clear();
-    dns.insert(node24);
-    _rack2dn.insert(make_pair(rack18, dns));
-    dns.clear();
-    dns.insert(gbnode1);
-    _rack2dn.insert(make_pair(gbrack1, dns));
-    dns.clear();
-    dns.insert(gbnode2);
-    _rack2dn.insert(make_pair(gbrack2, dns));
-
-    _dn2rack.insert(pair<string, string>(node2, rack1));
-    _dn2rack.insert(pair<string, string>(node3, rack2));
-    _dn2rack.insert(pair<string, string>(node4, rack3));
-    _dn2rack.insert(pair<string, string>(node5, rack4));
-    _dn2rack.insert(pair<string, string>(node6, rack5));
-    _dn2rack.insert(pair<string, string>(node7, rack6));
-    _dn2rack.insert(pair<string, string>(node8, rack7));
-    _dn2rack.insert(pair<string, string>(node9, rack8));
-    _dn2rack.insert(pair<string, string>(node12, rack9));
-    _dn2rack.insert(pair<string, string>(node13, rack10));
-    _dn2rack.insert(pair<string, string>(node14, rack11));
-    _dn2rack.insert(pair<string, string>(node15, rack12));
-    _dn2rack.insert(pair<string, string>(node16, rack13));
-    _dn2rack.insert(pair<string, string>(node17, rack14));
-    _dn2rack.insert(pair<string, string>(node20, rack15));
-    _dn2rack.insert(pair<string, string>(node21, rack16));
-    _dn2rack.insert(pair<string, string>(node23, rack17));
-    _dn2rack.insert(pair<string, string>(node24, rack18));
-    _dn2rack.insert(pair<string, string>(gbnode1, gbrack1));
-    _dn2rack.insert(pair<string, string>(gbnode2, gbrack2)); 
-  }
-
-}
-
 void Metadata::initializeMetaData(){
-  k = 4;
-  l_f = 2;
-  g = 2;
-  l_c = 1;
-  place_method = 1;
-  setRackDN_k4();
+  k = _config->k;
+  l_f = _config->l_f;
+  g = _config->g;
+  l_c = _config->l_c;
+  place_method = _config->place_method;
+
+  _gw_ip = _config->gw_ip;
+
+  int rack_num = _config->rack_num;
+  for(int i = 1; i <= rack_num; ++i) {
+    _racks.insert("/rack" + to_string(i));
+  }
+
+  _rack2dn = _config->rack2dn;
+  _dn2rack = _config->dn2rack;
 }
 
-  // Note, this function is to tackle the situation when the IP address of each DN is not of the same length,
-  // e.g., if the IP of DN1 is "18.0.12.8", and the IP of DN2 is "192.168.0.21",
-  // after normalizing, then the IP of DN1 changes to "18.0.12.8kkk", and that of DN2 changes to "192.168.0.21".
-string Metadata::normalizeDNIP(string dnIP) {
-  int max_ip_len = 12;
-  string tempIP = dnIP;
-  int temp_ip_len = tempIP.length();
-  char* temp_ip = (char*)tempIP.c_str();
-  char* ret_ip = new char[max_ip_len];
-  for(int i = 0; i < temp_ip_len; ++i) {
-    ret_ip[i] = temp_ip[i];
-  }
-  for(int i = temp_ip_len; i < max_ip_len; ++i) {
-    ret_ip[i] = 'k';
-  }
-  return (string)ret_ip;
-}
 
-Metadata::Metadata(){
+
+Metadata::Metadata(Config *config){
   _racks.clear();
   _rack2dn.clear();
   _dn2rack.clear();
@@ -596,6 +36,7 @@ Metadata::Metadata(){
   _reservedStripe2blk.clear();
   _blk2stripe.clear();
   _blk2IpAddr.clear();
+  _config = config;
   initializeMetaData();
 }
 
@@ -617,13 +58,40 @@ Metadata::~Metadata(){
   _blk2IpAddr.clear();
 }
 
-  // print all the metadata about files and stripes
+  // print all the metadata about topology, files and stripes
 void Metadata::print(){
-  cout<<"metadata about files and stripes:"<<endl;
+  cout<<"metadata about topology, files and stripes:"<<endl;
+  cout<<"k: "<<k<<", l_f: "<<l_f<<", g: "<<g<<", l_c: "<<l_c<<endl;
+  cout<<"place_method: "<<place_method<<endl;
+  cout<<"gw_ip: "<<_gw_ip<<endl;
+  cout<<"racks: "<<endl;
+  set<string>::const_iterator _racksIter;
+  for(_racksIter = _racks.begin(); _racksIter != _racks.end(); ++_racksIter) {
+    cout<<*_racksIter<<endl;
+  }
+  cout<<"rack to dn: "<<endl;
+  map<string, set<string>>::const_iterator _rack2dnIter;
+  for(_rack2dnIter = _rack2dn.begin(); _rack2dnIter != _rack2dn.end(); ++_rack2dnIter) {
+    cout<<_rack2dnIter->first<<", ";
+    set<string> tmpNodes = _rack2dnIter->second;
+    set<string>::const_iterator tmpNodeIter;
+    for(tmpNodeIter = tmpNodes.begin(); tmpNodeIter != tmpNodes.end(); ++tmpNodeIter) {
+      cout<<*tmpNodeIter<<", ";
+    }
+    cout<<endl;
+  }
+  cout<<"dn to rack: "<<endl;
+  map<string, string>::const_iterator _dn2rackIter;
+  for(_dn2rackIter = _dn2rack.begin(); _dn2rackIter != _dn2rack.end(); ++_dn2rackIter) {
+    cout<<_dn2rackIter->first<<", "<<_dn2rackIter->second<<endl;
+  }
+  
+  cout<<"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"<<endl;
+
   cout<<"file number: "<<_file_num<<endl;
   cout<<"file names: "<<endl;
   set<string>::const_iterator _fileNamesIter;
-  for(_fileNamesIter = _fileNames.begin(); _fileNamesIter !=  _fileNames.end(); ++_fileNamesIter){
+  for(_fileNamesIter = _fileNames.begin(); _fileNamesIter != _fileNames.end(); ++_fileNamesIter){
     cout<<*_fileNamesIter<<endl;
   }
   cout<<"file sizes: "<<endl;
@@ -657,7 +125,7 @@ void Metadata::print(){
   cout<<"stripe number: "<<_stripe_num<<endl;
   cout<<"stripe names: "<<endl;
   set<string>::const_iterator _stripeNamesIter;
-  for(_stripeNamesIter = _stripeNames.begin(); _stripeNamesIter !=  _stripeNames.end(); ++_stripeNamesIter){
+  for(_stripeNamesIter = _stripeNames.begin(); _stripeNamesIter != _stripeNames.end(); ++_stripeNamesIter){
     cout<<*_stripeNamesIter<<endl;
   }
   cout<<"stripe to block: "<<endl;
@@ -709,7 +177,7 @@ string Metadata::getDN2Rack(string dn){
 }
 
 string Metadata::getGW() {
-  return _gateWay;
+  return _gw_ip;
 }
 
 

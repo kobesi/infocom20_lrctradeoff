@@ -29,7 +29,7 @@ using namespace std;
 class Socket{
   private:
     char* denormalizeIP(const char* dest_ip);
-    int initClient(int port_num);
+    int initClient(void);
     int initServer(int port_num);
     void recvData(int connfd, char* buff, size_t chunk_size, size_t packet_size, int index, int* mark_recv);
   public:
@@ -38,7 +38,6 @@ class Socket{
       // send data
     void sendData(const char* buf, size_t chunk_size, size_t packet_size, const char* des_ip, int des_port_num);
       // receive data in parallel
-    //void paraRecvData(int server_port_num, int chunk_size, char* total_recv_data, int num_conn, int* mark_recv, int packet_num, int packet_size, int flag, char** source_IPs);
     void paraRecvData(int server_port_num, char* total_recv_data, size_t chunk_size, size_t packet_size, int num_conn, int* mark_recv, int flag, char** source_IPs);
       // receive command
     size_t recvCmd(int server_port_num, size_t buf_size, char* buf);

@@ -1,16 +1,17 @@
 #include "Coordinator.hh"
 
-Coordinator::Coordinator(Metadata* newMeta, Socket* cn2dnSocket, Socket* dn2dnSocket){
+Coordinator::Coordinator(Metadata* newMeta, Config* config, Socket* cn2dnSocket, Socket* dn2dnSocket){
   meta = newMeta;
+  conf = config;
   cn2dnSoc = cn2dnSocket;
   dn2dnSoc = dn2dnSocket;
-  k = 4;
-  l_f = 2;
-  g = 2;
-  l_c = 1;
-  chunk_size = 1024*1024*64;
-  packet_size = 1024*1024;
-  place_method = OPT_S;
+  k = conf->k;
+  l_f = conf->l_f;
+  g = conf->g;
+  l_c = conf->l_c;
+  chunk_size = 1024*1024*conf->chunk_size;
+  packet_size = 1024*1024*conf->packet_size;
+  place_method = conf->place_method;
 }
 
 Coordinator::~Coordinator(){
@@ -81,7 +82,7 @@ void Coordinator::testPerformance(string file) {
   // send a block when uploading, wait and receive ack
 int Coordinator::CNSendData(int blk_id, string blk_name, char* buf, string blk_ip, char* ack) {
   string cmd = "en";
-  cmd += string(blk_name);
+  cmd += blk_name;
   cout<<"~~~upload block "<<blk_id<<", send cmd: "<<cmd<<endl;
   sendCmd(cmd, blk_ip);
   cout<<"~~~then send data!"<<endl;
@@ -132,7 +133,7 @@ void Coordinator::uploadFile(string file){
     // we assume special-format files, such as "FI0000", "FI0001", whose names are composed of six chars.
 	// we then add four numbers to represent a stripe, such as "0000", "0001".
 	// we next add two numbers to represent a block, such as "00", "01".
-	// e.g., the first block in the first stripe of file "FI0000" is represented by "FI0000-00000-00".
+	// e.g., the first block in the first stripe of file "FI0000" is represented by "FI0000-0000-00".
   int stripe_name_len = 6 + 1 + 4 + 1;
   int blk_name_len = 6 + 1 + 4 + 1 + 2 + 1;
   char* stripe_name = new char[stripe_name_len];
@@ -151,10 +152,10 @@ void Coordinator::uploadFile(string file){
   int ten;
   int one;
 
-    // we new a stripe-length (i.e., n = k + l_f + g) of bufs 
-	// to store the data and parity blocks.
-  char** buf = new char*[k + l_f + g];
-  for(int i = 0; i < k + l_f + g; ++i) {
+    // we new a stripe-length (i.e., k + l_f) of bufs 
+	// to store the data and local parity blocks.
+  char** buf = new char*[k + l_f];
+  for(int i = 0; i < k + l_f; ++i) {
     buf[i] = new char[chunk_size];
   }
     // open file
@@ -163,14 +164,14 @@ void Coordinator::uploadFile(string file){
     cout<<"WARNING: file not exist, cannot proceed..."<<endl;
     return;
   }
-    // when we send the n buf of blocks to n different storage nodes, 
-	// the coordinator will wait and receive an ack from each of the n nodes.
+    // when we send the buf of blocks to k + l_f different storage nodes, 
+	// the coordinator will wait and receive an ack from each of the k + l_f nodes.
   int ack_size = 1024;
-  char** acks = new char*[k + l_f + g];
-  for(int i = 0; i < k + l_f + g; ++i) {
+  char** acks = new char*[k + l_f];
+  for(int i = 0; i < k + l_f; ++i) {
     acks[i] = new char[ack_size];
   }
-  int* ack_lens = new int[k + l_f + g];
+  int* ack_lens = new int[k + l_f];
 
   // [2nd], stripe info
   int all_stripe_succ_tag = 1;
@@ -204,39 +205,36 @@ void Coordinator::uploadFile(string file){
     // [3rd], block info
     blocks.clear();
     int all_block_succ_tag = 1;
-    for(int blk_id = 0; blk_id < k + l_f + g; ++blk_id) {
+    for(int blk_id = 0; blk_id < k + l_f; ++blk_id) {
       ten = blk_id / 10;
       one = blk_id - ten * 10;
       blk_name[12] = '0' + ten;
       blk_name[13] = '0' + one;
       blk_name[14] = '\0';
-      blocks.insert(pair<unsigned int, string>(blk_id, blk_name));
+      blocks.insert(pair<unsigned int, string>(blk_id, string(blk_name)));
         // !!! update stripe metadata
-      meta->updateBlkStripes(blk_name, stripe_name);
+      meta->updateBlkStripes(string(blk_name), string(stripe_name));
       
 	    // fill each block
       if(blk_id < k) {
           // data blocks
         fread(buf[blk_id], 1, chunk_size, fp2);
-      } else if(blk_id < k + l_f) {
+      } else {
           // local parity blocks
         calculateLocalParityBlock(blk_id, buf);
-      } else {
-          // global parity blocks
-        memset(buf[blk_id], 1, sizeof(char)*chunk_size);
       }
         // send each block
       for(blk_id2IPIter = blk_id2IP.begin(); blk_id2IPIter != blk_id2IP.end(); ++blk_id2IPIter) {
         temp_blk_id = (*blk_id2IPIter).first;
         temp_blk_IP = (*blk_id2IPIter).second;
         if(temp_blk_id == blk_id && blk_id < k + l_f) {
-          ack_lens[blk_id] = CNSendData(temp_blk_id, blk_name, buf[blk_id], temp_blk_IP, acks[blk_id]);
+          ack_lens[blk_id] = CNSendData(temp_blk_id, string(blk_name), buf[blk_id], temp_blk_IP, acks[blk_id]);
           if(strcmp(acks[blk_id], "write blk success") != 0) {
             cout<<"write block "<<blk_id<<" fail!"<<endl;
             all_block_succ_tag = -1;
           }
             // !!! update stripe metadata
-          meta->updateBlkIPs(blk_name, temp_blk_IP);
+          meta->updateBlkIPs((string)blk_name, temp_blk_IP);
           break;
         }
       }
@@ -245,7 +243,7 @@ void Coordinator::uploadFile(string file){
       all_stripe_succ_tag = -1;
     }
       // !!! update stripe metadata
-    meta->updateStripeBlks(stripe_name, blocks);
+    meta->updateStripeBlks(string(stripe_name), blocks);
 
   } // end of stripe info
 
@@ -260,14 +258,14 @@ void Coordinator::uploadFile(string file){
   
   delete stripe_name;
   delete blk_name;
-  for(int i = 0; i < k + l_f + g; ++i) {
+  for(int i = 0; i < k + l_f; ++i) {
     delete buf[i];
   }
   delete buf;
   if(fp2 != NULL) {
     fclose(fp2);
   }
-  for(int i = 0; i < k + l_f + g; ++i){
+  for(int i = 0; i < k + l_f; ++i){
     delete acks[i];
   }
   delete acks;
@@ -275,6 +273,7 @@ void Coordinator::uploadFile(string file){
 }
 
   // decide the stripe's blocks' locations
+  // main function for cluster-aware placement
 map<int, string> Coordinator::decide_location() {
   map<int, string> blk_id2IP;
 
@@ -297,7 +296,7 @@ map<int, string> Coordinator::decide_location() {
   int r_f = k / l_f;
   int r_c = k / l_c;
 
-  // sort according to the number of dns each rack
+  // sort the racks according to the number of dns in each rack
   for(int i = 0; i < rack_num - 1; ++i) {
     for(int j = rack_num - 1; j > i; --j) {
       if(dn_num_each_rack[j] > dn_num_each_rack[j-1]) {
@@ -358,6 +357,7 @@ map<int, string> Coordinator::decide_location() {
       }
     } // end of outter for
 
+    /*
     string gp_rack = temp_racks[l_c * delta];
     dns = meta->getRack2DN(gp_rack);
     int dn_num = dns.size();
@@ -376,10 +376,12 @@ map<int, string> Coordinator::decide_location() {
         blk_id2IP.insert(pair<int, string>(temp_gp, temp_dns[index++]));
       }
     }
+    */ // Note: this part of code may be useful in future for placing global parity blocks
+
   } // end of if place_method == OPT_S
 
   if(place_method == OPT_R) {
-    for(int i = 0; i < l_c * delta + 1; ++i) {
+    for(int i = 0; i < l_c * delta; ++i) {
       string rack = temp_racks[i];
       dns = meta->getRack2DN(rack);
       int dn_num = dns.size();
@@ -404,7 +406,9 @@ map<int, string> Coordinator::decide_location() {
         } else {
           blk_id2IP.insert(pair<int, string>(temp_lp, temp_dns[index++]));
         }
-      } else {
+      }
+      /*
+      else {
         for(int gpIdx = 0; gpIdx < g; ++gpIdx) {
           int temp_gp = gpIdx + k + l_f;
           if(dn_num == 1) {
@@ -413,11 +417,12 @@ map<int, string> Coordinator::decide_location() {
             blk_id2IP.insert(pair<int, string>(temp_gp, temp_dns[index++]));          }
         }
       }
+      */ // Note: this part of code may be useful in future for placing global parity blocks
     }
   } // end of if place_method == OPT_R
 
   if(place_method == FLAT) {
-    for(int i = 0; i < k + l_f + g; ++i) {
+    for(int i = 0; i < k + l_f; ++i) {
       string rack = temp_racks[i];
       dns = meta->getRack2DN(rack);
       int dn_num = dns.size();
@@ -436,11 +441,11 @@ map<int, string> Coordinator::decide_location() {
   map<int, string>::const_iterator blk_id2IPIter;
   for(blk_id2IPIter = blk_id2IP.begin(); blk_id2IPIter != blk_id2IP.end(); ++blk_id2IPIter) {
     if((*blk_id2IPIter).first < k) {
-      cout<<"data blk "<<(*blk_id2IPIter).first<<" ---> "<<(*blk_id2IPIter).second<<endl;
+      cout<<"data block "<<(*blk_id2IPIter).first<<" ---> "<<(*blk_id2IPIter).second<<endl;
     } else if ((*blk_id2IPIter).first < k + l_f) {
-      cout<<"local parity "<<(*blk_id2IPIter).first - k<<" ---> "<<(*blk_id2IPIter).second<<endl;
+      cout<<"local parity block "<<(*blk_id2IPIter).first - k<<" ---> "<<(*blk_id2IPIter).second<<endl;
     } else {
-      cout<<"global parity "<<(*blk_id2IPIter).first - k - l_f<<" ---> "<<(*blk_id2IPIter).second<<endl;
+      cout<<"global parity block "<<(*blk_id2IPIter).first - k - l_f<<" ---> "<<(*blk_id2IPIter).second<<endl;
     }
   }
 
@@ -462,9 +467,9 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
   int stripe_len;
   bool hot_tag = meta->isFileHot(file);
   if(hot_tag){
-    stripe_len = k + l_f + g;
+    stripe_len = k + l_f; //k + l_f + g;
   } else {
-    stripe_len = k + l_c + g;
+    stripe_len = k + l_c; //k + l_c + g;
   }
   string temp_blocks[stripe_len];
   string temp_IPs[stripe_len];
@@ -501,12 +506,13 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
         cout<<"ack length: "<<ack_lens[tmp_block_idx]<<endl;
       }
     }
+
     // 2rd, receive blocks
     bool block_miss = false;
     int missing_ID = -1;
     for(int i = 0; i < k; ++i) {
       if(strcmp(acks[i], "blk_ex") == 0){
-
+        // do nothing
       } else if(strcmp(acks[i], "blk_mi") == 0) {
         block_miss = true;
         missing_ID = i;
@@ -518,7 +524,6 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
       // simulate block miss
       cout<<"###### simulate block miss ###### "<<endl;
       missing_ID = sim_miss_id;
-
     }
  
     cout<<"~~~~~~ data block "<<missing_ID<<" fails ~~~~~~"<<endl;
@@ -558,7 +563,51 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
       decode_time = end_time.tv_sec-start_time.tv_sec+(end_time.tv_usec-start_time.tv_usec)*1.0/1000000;
       fprintf(stderr, "~~~~~~ decode time: %.2lf s\n", decode_time);
     }
+
   }// end of outer for
+
+  /*// download file again
+  FILE* fp = fopen("./output", "w");
+  if(fp == NULL) {
+    cout<<"open file error!"<<endl;
+    return decode_time;
+  }
+  int BUFSIZE = chunk_size*k;
+  char* buf = new char[BUFSIZE];
+  int packet_num = chunk_size / packet_size;
+  int* mark_recv = new int[packet_num*k];
+  char** source_IPs_recv_data = new char*[k];
+  for(int i = 0; i < k; ++i){
+    source_IPs_recv_data[i] = new char[20];
+  }
+
+  for(int j = 0; j < packet_num*k; ++j) {
+    mark_recv[j] = -1;
+  }
+  cn2dnSoc->paraRecvData(CN_DO_DATA_PORT, buf, chunk_size, packet_size, k, mark_recv, DATA_CHUNK, source_IPs_recv_data);
+  //cout<<"source_IPs_recv_data: "<<endl;
+  //for(int i = 0; i < k; ++i){
+  //  cout<<source_IPs_recv_data[i]<<endl;
+  //}
+  int write_len = 0;
+  for(int i = 0; i < k; ++i){
+    int index = 0;
+    for(; index < k; ++index){
+      if(strcmp(source_IPs_recv_data[index], (char*)temp_IPs[i].c_str()) == 0){
+        break;
+      }
+    }
+    write_len = fwrite(buf + index*chunk_size, 1, chunk_size, fp);
+    //cout<<"write size: "<<write_len<<endl;
+  }
+
+  delete buf;
+  delete mark_recv;
+  fclose(fp);
+  for(int i = 0; i < k; ++i){
+    delete source_IPs_recv_data[i];
+  }
+  delete source_IPs_recv_data;*/
 
   for(int i = 0; i < k; ++i){
     delete acks[i];
@@ -570,6 +619,7 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
   return decode_time;
 }
 
+ // functions required for decode
 int Coordinator::requiredLocalParityBlkID(int missing_ID, bool hot_tag){
   int r_f = k / l_f;
   int r_c = k / l_c;
@@ -705,6 +755,8 @@ string Coordinator::generateDecodeCmd(string stripe_blks[], string blk_IPs[], in
         }
       }
     }
+
+    // missing block command, e.g., [D0 in Fig.4 in paper]
     retCmd += "wa";
     retCmd += to_string(num_blk_missing_rack - 1 + num_wait_other_racks);
     retCmd += "blk";
@@ -719,18 +771,21 @@ string Coordinator::generateDecodeCmd(string stripe_blks[], string blk_IPs[], in
     retCmd += "reco";
 
     if(num_wait_other_racks != 0) {
-    string gw_cmd_str = "ga";
-    gw_cmd_str += to_string(1);
-    gw_cmd_str += "wa";
-    gw_cmd_str += to_string(num_wait_other_racks);
-    gw_cmd_str += gw_waited_block_ip_concated_str;
-    gw_cmd_str += "se";
-    gw_cmd_str += missing_block_ip;
-    strcpy(gw_cmd, (char*)gw_cmd_str.c_str());
+      // gateway command
+      string gw_cmd_str = "ga";
+      gw_cmd_str += to_string(1);
+      gw_cmd_str += "wa";
+      gw_cmd_str += to_string(num_wait_other_racks);
+      gw_cmd_str += gw_waited_block_ip_concated_str;
+      gw_cmd_str += "se";
+      gw_cmd_str += missing_block_ip;
+      strcpy(gw_cmd, (char*)gw_cmd_str.c_str());
     }
 
   } else {
     if(rack == missing_block_rack) {
+      // command for a block residing in the missing block's rack, but not 
+	  // the missing block, e.g., [D1 in Fig.4 in paper]
       // "se block missing_block_ip"
       retCmd += "se";
       retCmd += block;
@@ -771,11 +826,13 @@ string Coordinator::generateDecodeCmd(string stripe_blks[], string blk_IPs[], in
         retCmd += gw_ip;
       } else {
         if(smallest_idx_this_rack < blk_id) {
+          // e.g., [D3/D5 in Fig.4 in paper]
           tmp_ip = blk_IPs[smallest_idx_this_rack];
           retCmd += "se";
           retCmd += block;
           retCmd += tmp_ip;
         } else {
+          // e.g., [D2/D4 in Fig.4 in paper]
           retCmd += "wa";
           retCmd += to_string(num_blk_this_rack - 1);
           retCmd += "blk";

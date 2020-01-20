@@ -1,5 +1,6 @@
 #include "Socket.hh"
 #include "Datanode.hh"
+#include "Config.hh"
 
 using namespace std;
 
@@ -9,9 +10,10 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
+  Config* config = new Config("./configuration.xml");
   Socket* cnSoc = new Socket();
   Socket* dnSoc = new Socket();
-  Datanode* dn = new Datanode(cnSoc, dnSoc);  
+  Datanode* dn = new Datanode(config, cnSoc, dnSoc);  
   int BUFSIZE = 1024;
   char* cmd = new char[BUFSIZE];
   int cmd_length;
@@ -24,6 +26,7 @@ int main(int argc, char** argv) {
     dn->analyzeAndRespond(cmd, cmd_length);
   }
 
+  delete config;
   delete cnSoc;
   delete dnSoc;
   delete dn;

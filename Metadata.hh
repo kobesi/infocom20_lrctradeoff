@@ -7,10 +7,14 @@
 #include <map>
 #include <set>
 
+#include "Config.hh"
+
 using namespace std;
 
 class Metadata{
   private:
+    Config *_config;
+
     int k;
     int l_f;
     int g;
@@ -22,7 +26,7 @@ class Metadata{
     map<string, set<string>> _rack2dn;
     map<string, string> _dn2rack;
 
-    string _gateWay;
+    string _gw_ip;
 
     int _file_num;
     set<string> _fileNames;
@@ -40,14 +44,10 @@ class Metadata{
     map<string, set<pair<unsigned int, string>>> _reservedStripe2blk;
     map<string, string> _blk2stripe;
     map<string, string> _blk2IpAddr;
-    
-    void setRackDN_k4(void);
-    void setRackDN_k8(void);
-    void setRackDN_k12(void);
+
     void initializeMetaData(void);
-    string normalizeDNIP(string dnIP);
   public:
-    Metadata();
+    Metadata(Config *config);
     ~Metadata();
     void print(void);
 

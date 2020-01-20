@@ -23,14 +23,17 @@ char* Socket::denormalizeIP(const char* dest_ip) {
 }
 
 // init client-side socket 
-int Socket::initClient(int port_num){
+int Socket::initClient(){
   int client_socket;
-  int on;
+  int opt;
+  int ret;
   if((client_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0){
     perror("create client socket error!");
   }
-  on = 1;
-  setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+  opt = 1;
+  if((ret = setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt))) != 0) {
+	perror("set client socket error!");
+  }
   return client_socket;
 }
 
@@ -50,11 +53,11 @@ int Socket::initServer(int port_num){
   }
 
   opt = 1;
-  if((ret = setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt))) != 0){
+  if((ret = setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt))) != 0){
     perror("set server socket error!");
   }
 
-  if(bind(server_socket, (struct sockaddr*)&my_addr, sizeof(my_addr))){
+  if((bind(server_socket, (struct sockaddr*)&my_addr, sizeof(my_addr))) != 0){
     perror("server socket bind error!");
   }
 
@@ -68,7 +71,7 @@ int Socket::initServer(int port_num){
  */
 void Socket::sendData(const char* buf, size_t chunk_size, size_t packet_size, const char* des_ip, int des_port_num){
   // client-side socket
-  int client_socket = initClient(0);
+  int client_socket = initClient();
 
   size_t ret;
 
@@ -89,23 +92,24 @@ void Socket::sendData(const char* buf, size_t chunk_size, size_t packet_size, co
   // send data
   size_t sent_len = 0;
   while(sent_len < chunk_size){
-    cout<<"send_len before write: "<<sent_len<<endl;
+    // debug: cout<<"send_len before write: "<<sent_len<<endl;
     ret = write(client_socket, buf + sent_len, packet_size);
     if(ret != packet_size) {
+      // close client socket and reinitialize, and reconnect and rewrite
       close(client_socket);
-      client_socket = initClient(0);
+      client_socket = initClient();
       while(connect(client_socket, (struct sockaddr*)&remote_addr, sizeof(remote_addr)) < 0);
       ret = write(client_socket, buf + sent_len, packet_size);
     }
     sent_len += ret;
-    cout<<"send_len after write: "<<sent_len<<endl;
+    // debug: cout<<"send_len after write: "<<sent_len<<endl;
     if(sent_len == chunk_size) {
       cout<<"sent len after write: "<<sent_len<<endl;
     }
   }
 
   // close client-side socket
-  if((ret=close(client_socket)) == -1){
+  if((close(client_socket)) == -1){
     cout << "close client_socket error!" << endl;
     exit(1);
   }
@@ -149,7 +153,6 @@ void Socket::recvData(int connfd, char* buff, size_t chunk_size, size_t packet_s
  *
  * if you need to record the source ips of each thread, you should set source_IPs.
  */
-//void Socket::paraRecvData(int server_port_num, int chunk_size, char* total_recv_data, int num_conn, int* mark_recv, int packet_num, int packet_size, int flag, char** source_IPs){
 void Socket::paraRecvData(int server_port_num, char* total_recv_data, size_t chunk_size, size_t packet_size, int num_conn, int* mark_recv, int flag, char** source_IPs){
   struct timeval bg_tm, ed_tm;
   gettimeofday(&bg_tm, NULL);
@@ -168,7 +171,7 @@ void Socket::paraRecvData(int server_port_num, char* total_recv_data, size_t chu
 
   // connect, receive connection
   int* connfd = (int*)malloc(sizeof(int)*num_conn);
-    // multi-threaded
+  // multi-threaded
   thread recv_thrds[num_conn];
   int index = 0;
   while(1){
@@ -208,7 +211,7 @@ void Socket::paraRecvData(int server_port_num, char* total_recv_data, size_t chu
   }
 
   gettimeofday(&ed_tm, NULL);
-  printf("paraRecv_time = %.2lf\n", ed_tm.tv_sec-bg_tm.tv_sec+(ed_tm.tv_usec-bg_tm.tv_usec)*1.0/1000000);
+  printf("paraRecv time = %.2lf\n", ed_tm.tv_sec-bg_tm.tv_sec+(ed_tm.tv_usec-bg_tm.tv_usec)*1.0/1000000);
 }
 
 /*

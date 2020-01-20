@@ -14,9 +14,10 @@ using namespace std;
 
 class Coordinator{
   private:
-    Metadata* meta;
-    Socket* cn2dnSoc;
-    Socket* dn2dnSoc;
+    Metadata *meta;
+    Config *conf;
+    Socket *cn2dnSoc;
+    Socket *dn2dnSoc;
     int k;
     int l_f;
     int g;
@@ -34,7 +35,7 @@ class Coordinator{
       // calculate local parity block when uploading
     void calculateLocalParityBlock(int local_blk_id, char** buf);
 
-      // functions required for docode
+      // functions required for decode
     int requiredLocalParityBlkID(int missing_ID, bool hot_tag);
     int requiredStartDataBlkID(int missing_ID, bool hot_tag);
     int requiredEndDataBlkID(int missing_ID, bool hot_tag);
@@ -45,7 +46,7 @@ class Coordinator{
     string generateDowncodeCmd(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int blk_id, int reserved_id, string gw_ip, char* gw_cmd, char* gw_cmd_f);
 
   public:
-    Coordinator(Metadata*, Socket*, Socket*);
+    Coordinator(Metadata*, Config*, Socket*, Socket*);
     ~Coordinator();
 
       // test the performance of upload, download, upcode and downcode
@@ -62,6 +63,7 @@ class Coordinator{
     double downcodeFile(string file);
 
       // decide the stripe's blocks' locations
+      // main function for cluster-aware placement
     map<int, string> decide_location(void);
 
       // different test functions

@@ -9,11 +9,12 @@ int main(int argc, char** argv) {
     cout<<"Usage: ./LRCCN!"<<endl;
     exit(1);
   }
- 
-  Metadata* meta = new Metadata();
+
+  Config *config = new Config("./configuration.xml");
+  Metadata* meta = new Metadata(config);
   Socket* cnSoc = new Socket();
   Socket* dnSoc = new Socket();
-  Coordinator* coor = new Coordinator(meta, cnSoc, dnSoc);
+  Coordinator* coor = new Coordinator(meta, config, cnSoc, dnSoc);
 
   cout<<"- - - input cmd to call upload, download, upcode, downcode - - -"<<endl;
   cout<<"  1. cmd: ul (file)"<<endl;
@@ -54,6 +55,7 @@ int main(int argc, char** argv) {
     cout<<"input cmd: ";
   }
 
+  delete config;
   delete meta;
   delete cnSoc;
   delete dnSoc;

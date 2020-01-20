@@ -1,19 +1,20 @@
 #include "Datanode.hh"
 
-Datanode::Datanode(Socket* cn2dnSocket, Socket* dn2dnSocket){
+Datanode::Datanode(Config* config, Socket* cn2dnSocket, Socket* dn2dnSocket){
+  conf = config;
   cn2dnSoc = cn2dnSocket;
   dn2dnSoc = dn2dnSocket;
-  cn_ip = normalizeIP("192.168.0.22");
-  gw_ip = normalizeIP("192.168.0.28");
-  data_path = "/home/jhli/WUSI/lrctradeoff/data/";
-  k = 4;
-  l_f = 2;
-  g = 2;
-  l_c = 1;
+  cn_ip = conf->cn_ip;
+  gw_ip = conf->gw_ip;
+  data_path = conf->data_path;
+  k = conf->k;
+  l_f = conf->l_f;
+  g = conf->g;
+  l_c = conf->l_c;
   blk_name_len = 14;
   ip_len = 12;
-  chunk_size = 1024*1024*64;
-  packet_size = 1024*1024;
+  chunk_size = 1024*1024*conf->chunk_size;
+  packet_size = 1024*1024*conf->packet_size;
   data_blk_name = new char[data_path.length() + 1 + blk_name_len];
 }
 
@@ -53,21 +54,6 @@ void Datanode::analyzeAndRespond(char* cmd, int cmd_length){
     // process gateway commands
     analysisGWCmd(cmd, cmd_length);
   }
-}
-
-string Datanode::normalizeIP(string IP) {
-  int max_ip_len = 12;
-  string tempIP = IP;
-  int temp_ip_len = tempIP.length();
-  char* temp_ip = (char*)tempIP.c_str();
-  char* ret_ip = new char[max_ip_len];
-  for(int i = 0; i < temp_ip_len; ++i) {
-    ret_ip[i] = temp_ip[i];
-  }
-  for(int i = temp_ip_len; i < max_ip_len; ++i) {
-    ret_ip[i] = 'k';
-  }
-  return (string)ret_ip;
 }
 
 void Datanode::analysisUploadCmd(char* cmd, int cmd_length){
