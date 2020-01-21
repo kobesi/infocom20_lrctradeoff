@@ -482,6 +482,23 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
 
   string gw_ip = meta->getGW();
 
+  FILE* fp = fopen("./output", "w");
+  if(fp == NULL) {
+    cout<<"open file error!"<<endl;
+    return decode_time;
+  }
+  int BUFSIZE = chunk_size*k;
+  char* buf = new char[BUFSIZE];
+  int packet_num = chunk_size / packet_size;
+  int* mark_recv = new int[packet_num*k];
+  char** source_IPs_recv_data = new char*[k];
+  for(int i = 0; i < k; ++i){
+    source_IPs_recv_data[i] = new char[20];
+  }
+  for(int j = 0; j < packet_num*k; ++j) {
+    mark_recv[j] = -1;
+  }
+
   set<string>::const_iterator stripesIter;
   for(stripesIter = stripes.begin(); stripesIter != stripes.end(); ++stripesIter){
     tmp_stripe = *stripesIter;
@@ -544,7 +561,7 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
     }
     string cmd = generateDecodeCmd(temp_blocks, temp_IPs, localParityIdx, missing_ID, hot_tag, gw_ip, gw_cmd);
     sendCmd(cmd, temp_IPs[localParityIdx]);
-    cout<<"~~~~~~ send cmd to local parity "<<(localParityIdx - k)<<" :"<<cmd<<endl;
+    cout<<"~~~~~~ send cmd to local parity block "<<(localParityIdx - k)<<" :"<<cmd<<endl;
 
     if(gw_cmd[0] != '\0') {
       cout<<"gw "<<gw_ip<<", decode cmd: "<<gw_cmd<<endl;
@@ -564,42 +581,30 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
       fprintf(stderr, "~~~~~~ decode time: %.2lf s\n", decode_time);
     }
 
-  }// end of outer for
-
-  /*// download file again
-  FILE* fp = fopen("./output", "w");
-  if(fp == NULL) {
-    cout<<"open file error!"<<endl;
-    return decode_time;
-  }
-  int BUFSIZE = chunk_size*k;
-  char* buf = new char[BUFSIZE];
-  int packet_num = chunk_size / packet_size;
-  int* mark_recv = new int[packet_num*k];
-  char** source_IPs_recv_data = new char*[k];
-  for(int i = 0; i < k; ++i){
-    source_IPs_recv_data[i] = new char[20];
-  }
-
-  for(int j = 0; j < packet_num*k; ++j) {
-    mark_recv[j] = -1;
-  }
-  cn2dnSoc->paraRecvData(CN_DO_DATA_PORT, buf, chunk_size, packet_size, k, mark_recv, DATA_CHUNK, source_IPs_recv_data);
-  //cout<<"source_IPs_recv_data: "<<endl;
-  //for(int i = 0; i < k; ++i){
-  //  cout<<source_IPs_recv_data[i]<<endl;
-  //}
-  int write_len = 0;
-  for(int i = 0; i < k; ++i){
-    int index = 0;
-    for(; index < k; ++index){
-      if(strcmp(source_IPs_recv_data[index], (char*)temp_IPs[i].c_str()) == 0){
-        break;
-      }
+    // download file again
+    for(int i = 0; i < k; ++i) {
+      string re_download_cmd = "re";
+      sendCmd(re_download_cmd, temp_IPs[i]);
+      cout<<"send ready to download cmd "<<i<<": "<<re_download_cmd<<endl;
     }
-    write_len = fwrite(buf + index*chunk_size, 1, chunk_size, fp);
-    //cout<<"write size: "<<write_len<<endl;
-  }
+    cn2dnSoc->paraRecvData(CN_DO_DATA_PORT, buf, chunk_size, packet_size, k, mark_recv, DATA_CHUNK, source_IPs_recv_data);
+    //cout<<"source_IPs_recv_data: "<<endl;
+      //for(int i = 0; i < k; ++i){
+      //  cout<<source_IPs_recv_data[i]<<endl;
+    //}
+    int write_len = 0;
+    for(int i = 0; i < k; ++i){
+      int index = 0;
+      for(; index < k; ++index){
+        if(strcmp(source_IPs_recv_data[index], (char*)temp_IPs[i].c_str()) == 0){
+          break;
+        }
+      }
+      write_len = fwrite(buf + index*chunk_size, 1, chunk_size, fp);
+      //cout<<"write size: "<<write_len<<endl;
+    }
+
+  }// end of outer for
 
   delete buf;
   delete mark_recv;
@@ -607,7 +612,7 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
   for(int i = 0; i < k; ++i){
     delete source_IPs_recv_data[i];
   }
-  delete source_IPs_recv_data;*/
+  delete source_IPs_recv_data;
 
   for(int i = 0; i < k; ++i){
     delete acks[i];
@@ -619,7 +624,7 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
   return decode_time;
 }
 
- // functions required for decode
+  // functions required for decode
 int Coordinator::requiredLocalParityBlkID(int missing_ID, bool hot_tag){
   int r_f = k / l_f;
   int r_c = k / l_c;
@@ -658,6 +663,7 @@ int Coordinator::requiredEndDataBlkID(int missing_ID, bool hot_tag){
   }
 }
 
+  // test decode command
 void Coordinator::testDecodeCmd(int missing_ID){
   string stripe_blks[k + l_f];
   stripe_blks[0] = "data0";
@@ -857,6 +863,7 @@ string Coordinator::generateDecodeCmd(string stripe_blks[], string blk_IPs[], in
    *    kernel routine 3: upcodeFile     *
    * * * * * * * * * * * * * * * * * * * */
 double Coordinator::upcodeFile(string file){
+  double upcode_time = 0.0;
   set<string> stripes = meta->getFile2Stripes(file);
   string tmp_stripe;
   set<pair<unsigned int, string>> tmpBlocks;
@@ -866,7 +873,7 @@ double Coordinator::upcodeFile(string file){
   bool hot_tag = meta->isFileHot(file);
   if(!hot_tag) {
     cout<<"file [ "<<file<<" ] is cold, cannot upcode"<<endl;
-    return 0.0;
+    return upcode_time;
   }
   int stripe_len = k + l_f + g;
   string temp_blocks[stripe_len];
@@ -889,7 +896,6 @@ double Coordinator::upcodeFile(string file){
   string gw_ip = meta->getGW();
 
   struct timeval start_time, end_time;
-  double upcode_time = 0.0;
   set<string>::const_iterator stripesIter;
   for(stripesIter = stripes.begin(); stripesIter != stripes.end(); ++stripesIter){
     tmp_stripe = *stripesIter;
@@ -914,7 +920,7 @@ double Coordinator::upcodeFile(string file){
     for(int idx = k; idx < k + l_f; ++idx) {
       string cmd = generateUpcodeCmd(temp_blocks, temp_IPs, idx, gw_ip, gw_cmd);
       sendCmd(cmd, temp_IPs[idx]);
-      cout<<"~~~~~~ send cmd to local parity "<<(idx - k)<<" :"<<cmd<<endl;
+      cout<<"~~~~~~ send cmd to local parity block "<<(idx - k)<<" :"<<cmd<<endl;
     }
 
     if(gw_cmd[0] != '\0') {
@@ -955,11 +961,9 @@ double Coordinator::upcodeFile(string file){
   }
   if(all_stripe_finish_upcode) {
     cout<<"@@@@@@ upcode success for file "<<file<<" !"<<endl;
+    // update metadata when a file upcodes from fast code into compact code
     meta->upcodeUpdateMetadata(file);
     fprintf(stderr, "@@@@@@ upcode time: %.2lf s\n", upcode_time);
-    //FILE* fpr = fopen("./results", "a");
-    //fprintf(fpr, "@@@@@@ upcode time: %.2lf s\n", upcode_time);
-    //fclose(fpr);
   }
 
   for(int i = 0; i < l_c; ++i){
@@ -974,8 +978,9 @@ double Coordinator::upcodeFile(string file){
   return upcode_time;
 }
 
+  // test upcode command
 void Coordinator::testUpcodeCmd(){
-  place_method = OPT_R;
+  //place_method = OPT_R;
   string stripe_blks[k + l_f];
   stripe_blks[0] = "data0";
   stripe_blks[1] = "data1";
@@ -994,7 +999,7 @@ void Coordinator::testUpcodeCmd(){
   char* gw_cmd = new char[200];
   gw_cmd[0] = '\0';
   for(int blk_id = k; blk_id < k + l_f; ++blk_id) {
-    cout<<"local parity id"<<(blk_id - k)<<" , upcode cmd: "<<generateUpcodeCmd(stripe_blks, blk_IPs, blk_id, gw_ip, gw_cmd)<<endl;
+    cout<<"local parity block id"<<(blk_id - k)<<" , upcode cmd: "<<generateUpcodeCmd(stripe_blks, blk_IPs, blk_id, gw_ip, gw_cmd)<<endl;
   }
   if(gw_cmd[0] != '\0') {
     cout<<"gw "<<gw_ip<<", upcode cmd: "<<gw_cmd<<endl;
@@ -1002,8 +1007,9 @@ void Coordinator::testUpcodeCmd(){
   delete gw_cmd;
 }
 
+  // test upcode command when k = 12
 void Coordinator::testUpcodeCmd_k_12(){
-  place_method = OPT_R;
+  //place_method = OPT_R;
   int k = 12;
   int l_f = 6;
   string stripe_blks[k + l_f];
@@ -1021,7 +1027,7 @@ void Coordinator::testUpcodeCmd_k_12(){
   char* gw_cmd = new char[200];
   gw_cmd[0] = '\0';
   for(int blk_id = k; blk_id < k + l_f; ++blk_id) {
-    cout<<"local parity id"<<(blk_id - k)<<" , upcode cmd: "<<generateUpcodeCmd(stripe_blks, blk_IPs, blk_id, gw_ip, gw_cmd)<<endl;
+    cout<<"local parity block id"<<(blk_id - k)<<" , upcode cmd: "<<generateUpcodeCmd(stripe_blks, blk_IPs, blk_id, gw_ip, gw_cmd)<<endl;
   }
   if(gw_cmd[0] != '\0') {
     cout<<"gw "<<gw_ip<<", upcode cmd: "<<gw_cmd<<endl;
@@ -1031,9 +1037,9 @@ void Coordinator::testUpcodeCmd_k_12(){
 
  // generate commands for upcode
 string Coordinator::generateUpcodeCmd(string stripe_blks[], string blk_IPs[], int fast_local_parity_id, string gw_ip, char* gw_cmd){
-  //int k = 12; //(this is for testUpcodeCmd_k_12)
-  //int l_f = 6;
-  //int l_c = 2;
+  //int k = 12; // (this is for testUpcodeCmd_k_12)
+  //int l_f = 6; // (this is for testUpcodeCmd_k_12)
+  //int l_c = 2; // (this is for testUpcodeCmd_k_12)
   string retCmd = "";
   if(!(k <= fast_local_parity_id && fast_local_parity_id < k + l_f)) {
     return retCmd;
@@ -1050,6 +1056,7 @@ string Coordinator::generateUpcodeCmd(string stripe_blks[], string blk_IPs[], in
   if((fast_local_parity_id - k) == (compact_local_parity_id - k) * delta) {
     string gw_waited_block_ip_concated_str = "";    
 
+    // e.g., [L0/L0' in Fig.4]
     retCmd += "reco";
     retCmd += block;
     retCmd += "wa";
@@ -1062,13 +1069,21 @@ string Coordinator::generateUpcodeCmd(string stripe_blks[], string blk_IPs[], in
       tmp_blk = stripe_blks[idx];
       tmp_ip = blk_IPs[idx];
       if(place_method == OPT_S) {
+        // in Opt-S, L0 waits for L1, L2, 
+        // and L0, L1, and L2 are in the same rack/ cluster
         retCmd += tmp_ip;
       } else {
+        // in Opt-R, or Flat, L0 waits for L1, L2, 
+        // but L0, L1, and L2 reside in different racks/ clusters, 
+        // so we wait blocks from the gateway
         retCmd += gw_ip;
         gw_waited_block_ip_concated_str += tmp_ip;
       }
     }
+
     if(place_method != OPT_S) {
+      // gateway command, as stated above, only in Opt-R and Flat, 
+      // the gateway will receive commands from the coordinator
       if(gw_cmd[0] == '\0') {
         string gw_cmd_str = "ga";
         gw_cmd_str += to_string(l_c);
@@ -1087,19 +1102,25 @@ string Coordinator::generateUpcodeCmd(string stripe_blks[], string blk_IPs[], in
         strcat(gw_cmd, (char*)gw_cmd_str.c_str());
       }
     }
+
   } else {
+    // e.g., [L1, L2 in Fig.4]
     int dest_fast_local_parity_id = (compact_local_parity_id - k) * delta + k;
     string dest_block = stripe_blks[dest_fast_local_parity_id];
     string dest_ip = blk_IPs[dest_fast_local_parity_id];
     if(place_method == OPT_S) {
+      // in Opt-S, L1, L2 directly send blocks to L0
       retCmd += "se";
       retCmd += block;
       retCmd += dest_ip;
     } else {
-        retCmd += "se";
-        retCmd += block;
-        retCmd += gw_ip;
+      // in Opt-R and Flat, L1, L2 send blocks to the gateway, 
+      // and the gateway re-send blocks to L0
+      retCmd += "se";
+      retCmd += block;
+      retCmd += gw_ip;
     }
+
   }
 
   return retCmd;
@@ -1109,6 +1130,7 @@ string Coordinator::generateUpcodeCmd(string stripe_blks[], string blk_IPs[], in
    *   kernel routine 4: downcodeFile    *
    * * * * * * * * * * * * * * * * * * * */
 double Coordinator::downcodeFile(string file){
+  double downcode_time = 0.0;
   set<string> stripes = meta->getFile2Stripes(file);
   string tmp_stripe;
   set<pair<unsigned int, string>> tmpBlocks;
@@ -1118,29 +1140,23 @@ double Coordinator::downcodeFile(string file){
   bool hot_tag = meta->isFileHot(file);
   if(hot_tag) {
     cout<<"file [ "<<file<<" ] is hot, cannot downcode"<<endl;
-    return 0.0;
+    return downcode_time;
   }
   int stripe_len = k + l_c + g;
   string temp_blocks[stripe_len];
   string temp_IPs[stripe_len];
+  // reserved blocks are for example, [L1, L2, L4, L5 in Fig.4]
   int reserved_len = k + l_f;
   string reserved_blocks[reserved_len];
   string reserved_IPs[reserved_len];
 
   int ack_size = 1024;
-  char** acks;
-  int* ack_lens;
-  int ack_num;
-  //if(place_method == OPT_S || place_method == FLAT) {
-    ack_num = l_c;
-  //} else {
-  //  ack_num = l_f;
-  //}
-  acks = new char*[ack_num];
+  int ack_num = l_c;
+  char** acks = new char*[ack_num];
   for(int i = 0; i < ack_num; ++i) {
     acks[i] = new char[ack_size];
   }
-  ack_lens = new int[ack_num];
+  int* ack_lens =  new int[ack_num];
 
   int stripe_num = stripes.size();
   bool* all_stripe_finish_tag = new bool[stripe_num];
@@ -1152,7 +1168,6 @@ double Coordinator::downcodeFile(string file){
   string gw_ip = meta->getGW();
 
   struct timeval start_time, end_time;
-  double downcode_time = 0.0;
   set<string>::const_iterator stripesIter;
   for(stripesIter = stripes.begin(); stripesIter != stripes.end(); ++stripesIter){
     tmp_stripe = *stripesIter;
@@ -1168,6 +1183,7 @@ double Coordinator::downcodeFile(string file){
       cout<<"block "<<tmp_block_idx<<", "<<tmp_block<<", IP: "<<tmp_IP<<endl;
     }
 
+    // retrieve the reserved blocks
     tmpBlocks = meta->getStripe2ReservedBlocks(tmp_stripe);
     cout<<"-&-&-& reserved blocks &-&-&-"<<endl;
     for(tmpBlocksIter = tmpBlocks.begin(); tmpBlocksIter != tmpBlocks.end(); ++tmpBlocksIter){
@@ -1182,12 +1198,12 @@ double Coordinator::downcodeFile(string file){
     cout<<"start downcode..."<<endl;
     gettimeofday(&start_time, NULL);
 
-    // TODO, 190704, add gw
     char* gw_cmd = new char[400];
     gw_cmd[0] = '\0';
     char* gw_cmd_further4flat = new char[100];
     gw_cmd_further4flat[0] = '\0';
 
+    // [send commands to D0-D5, L0]
     for(int i = 0; i < k + l_c; ++i) {
       string cmd = generateDowncodeCmd(temp_blocks, temp_IPs, reserved_blocks, reserved_IPs, i, -1, gw_ip, gw_cmd, gw_cmd_further4flat);
       if(cmd != "") {
@@ -1196,21 +1212,22 @@ double Coordinator::downcodeFile(string file){
       if(i < k) {
         cout<<"%%%%%% send cmd to data block "<<i<<" :"<<cmd<<endl;
       } else {
-        cout<<"%%%%%% send cmd to compact local parity "<<(i - k)<<" :"<<cmd<<endl;
+        cout<<"%%%%%% send cmd to compact local parity block "<<(i - k)<<" :"<<cmd<<endl;
       }
     }
+    // [send commands to L1, L2]
     for(int i = k; i < k + l_f; ++i) {
       string cmd = generateDowncodeCmd(temp_blocks, temp_IPs, reserved_blocks, reserved_IPs, -1, i, gw_ip, gw_cmd, gw_cmd_further4flat);
       int delta = l_f / l_c;
       if((i - k) % delta != 0) {
         sendCmd(cmd, reserved_IPs[i]);
-        cout<<"------ send cmd to fast local parity "<<(i - k)<<" :"<<cmd<<endl;
+        cout<<"------ send cmd to fast local parity block "<<(i - k)<<" :"<<cmd<<endl;
       }
     }
 
     if(gw_cmd[0] != '\0') {
       strcat(gw_cmd, gw_cmd_further4flat);
-      cout<<"gw "<<gw_ip<<", upcode cmd: "<<gw_cmd<<endl;
+      cout<<"gw "<<gw_ip<<", downcode cmd: "<<gw_cmd<<endl;
       sendCmd(string(gw_cmd), gw_ip);
     }
     delete gw_cmd;
@@ -1247,11 +1264,9 @@ double Coordinator::downcodeFile(string file){
   }
   if(all_stripe_finish_downcode) {
     cout<<"%%%%%% downcode success for file "<<file<<" !"<<endl;
+    // update metadata when a file downcodes from compact code into fast code
     meta->downcodeUpdateMetadata(file);
     fprintf(stderr, "%%%%%% downcode time: %.2lf s\n", downcode_time);
-    //FILE* fpr = fopen("./results", "a");
-    //fprintf(fpr, "%%%%%% downcode time: %.2lf s\n", downcode_time);
-    //fclose(fpr);
   }
 
   for(int i = 0; i < ack_num; ++i){
@@ -1266,6 +1281,7 @@ double Coordinator::downcodeFile(string file){
   return downcode_time;
 }
 
+  // test downcode command, when k = 12
 void Coordinator::testDowncodeCmd_k_12(){
   //place_method = FLAT;
   int k = 12;
@@ -1319,15 +1335,17 @@ void Coordinator::testDowncodeCmd_k_12(){
 
   // generate commands for downcode
 string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int blk_id, int reserved_id, string gw_ip, char* gw_cmd, char* gw_cmd_f){
-  //int k = 12;
-  //int l_f = 6;
-  //int l_c = 2;
+  //int k = 12; // (this is for testDowncodeCmd_k_12)
+  //int l_f = 6; // (this is for testDowncodeCmd_k_12)
+  //int l_c = 2; // (this is for testDowncodeCmd_k_12)
   string retCmd = "";
+
   int r_c = k / l_c;
   int r_f = k / l_f;
   int delta = l_f / l_c;
 
   if(reserved_id == -1) {
+    // for blocks D0-D5, L0
     if(0 <= blk_id && blk_id < k) {
       // data block
       if(place_method == OPT_S || place_method == FLAT) {
@@ -1338,14 +1356,15 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
         }
       }
     } else if (blk_id < k + l_c) {
-      // compact local parity
+      // compact local parity block
     } else {
-      // global parity
+      // global parity block
       return retCmd;
     }
   }
 
   if(blk_id == -1) {
+    // for blocks L1, L2
     if(k <= reserved_id && reserved_id < k + l_f) {
       int fast_local_group_id = reserved_id - k;
       if(fast_local_group_id % delta == 0) {
@@ -1356,179 +1375,229 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       return retCmd;
     }
   }
-  retCmd += "do";
-
-  string block;
-  string block_ip;
-  string reserved_block;
-  string reserved_ip;
-  string tmp_blk;
-  string tmp_ip;
 
   if(reserved_id == -1) {
-  block = stripe_blks[blk_id];
-  block_ip = blk_IPs[blk_id];
-  if(0 <= blk_id && blk_id < k) {
-    // data block
-    int compact_local_group_id = blk_id / r_c;
-    int fast_local_group_id = blk_id / r_f;
-    int smallest_id_this_fast_local_group = fast_local_group_id * r_f;
-    if(place_method == OPT_S && compact_local_group_id * r_c <= blk_id && blk_id < compact_local_group_id * r_c + (delta - 1) * g) {
-      if(fast_local_group_id % delta == 0) {
-        int dest_parity_id = k + fast_local_group_id / delta;
-        tmp_blk = stripe_blks[dest_parity_id];
-        tmp_ip = blk_IPs[dest_parity_id];
-        retCmd += "se";
-        retCmd += block;
-        retCmd += tmp_ip;
-      } else {
-        if(blk_id == smallest_id_this_fast_local_group) {
-          retCmd += "wa";
-          retCmd += to_string(r_f - 1);
-          retCmd += "blk";
-          for(int idx = smallest_id_this_fast_local_group + 1; idx < smallest_id_this_fast_local_group + r_f; ++idx) {
-            tmp_blk = stripe_blks[idx];
-            tmp_ip = blk_IPs[idx];
+    retCmd = generateDowncodeCmd4DataAndFastLP(stripe_blks, blk_IPs, reserved_blks, reserved_IPs, blk_id, gw_ip, gw_cmd);
+  } // end of if(reserved_id == -1)
+
+  if(blk_id == -1) {
+    retCmd = generateDowncodeCmd4ReservedLP(stripe_blks, blk_IPs, reserved_blks, reserved_IPs, reserved_id, gw_ip, gw_cmd, gw_cmd_f);
+  } // end of if(blk_id == -1)
+
+  return retCmd;
+}
+
+  // generate downcode commands for D0-D5, L0
+string Coordinator::generateDowncodeCmd4DataAndFastLP(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int blk_id, string gw_ip, char* gw_cmd) {
+    int r_c = k / l_c;
+    int r_f = k / l_f;
+    int delta = l_f / l_c;
+
+    string block;
+    string block_ip;
+    string reserved_block;
+    string reserved_ip;
+    string tmp_blk;
+    string tmp_ip;
+    string retCmd = "do";
+
+    block = stripe_blks[blk_id];
+    block_ip = blk_IPs[blk_id];
+    if(0 <= blk_id && blk_id < k) {
+      // data block
+      int compact_local_group_id = blk_id / r_c;
+      int fast_local_group_id = blk_id / r_f;
+      int smallest_id_this_fast_local_group = fast_local_group_id * r_f;
+      if(place_method == OPT_S && compact_local_group_id * r_c <= blk_id && blk_id < compact_local_group_id * r_c + (delta - 1) * g) {
+        if(fast_local_group_id % delta == 0) {
+          // in Opt-S, D0, D1, send blocks to L0
+          int dest_parity_id = k + fast_local_group_id / delta;
+          tmp_blk = stripe_blks[dest_parity_id];
+          tmp_ip = blk_IPs[dest_parity_id];
+          retCmd += "se";
+          retCmd += block;
+          retCmd += tmp_ip;
+        } else {
+          if(blk_id == smallest_id_this_fast_local_group) {
+            // in Opt-S, D2 waits for D3, and re-send an XOR sum to the gateway
+            // in Opt-S, D4 waits for D5, and re-send an XOR sum to the gateway
+            retCmd += "wa";
+            retCmd += to_string(r_f - 1);
+            retCmd += "blk";
+            for(int idx = smallest_id_this_fast_local_group + 1; idx < smallest_id_this_fast_local_group + r_f; ++idx) {
+              tmp_blk = stripe_blks[idx];
+              tmp_ip = blk_IPs[idx];
+              retCmd += tmp_ip;
+            }
+            int reserved_parity_id = fast_local_group_id + k;
+            tmp_blk = reserved_blks[reserved_parity_id];
+            tmp_ip = reserved_IPs[reserved_parity_id];
+            retCmd += "se";
+            retCmd += block;
+            retCmd += gw_ip;
+
+            if(delta - 2 > 0) {
+              // gateway command
+              // the gateway re-send D2 + D3 to L1
+              // the gateway re-send D4 + D5 to L2
+              if(gw_cmd[0] == '\0') {
+                string gw_cmd_str = "ga";
+                gw_cmd_str += to_string((delta - 2) * l_c);
+                gw_cmd_str += "wa";
+                gw_cmd_str += to_string(1);
+                gw_cmd_str += block_ip;
+                gw_cmd_str += "se";
+                gw_cmd_str += tmp_ip;
+                strcpy(gw_cmd, (char*)gw_cmd_str.c_str());
+              } else {
+                string gw_cmd_str = "wa";
+                gw_cmd_str += to_string(1);
+                gw_cmd_str += block_ip;
+                gw_cmd_str += "se";
+                gw_cmd_str += tmp_ip;
+                strcat(gw_cmd, (char*)gw_cmd_str.c_str());
+              }
+            }
+          } else {
+            // in Opt-S, D3 directly send its content to D2
+            // in Opt-S, D5 directly send its content to D4
+            tmp_blk = stripe_blks[smallest_id_this_fast_local_group];
+            tmp_ip = blk_IPs[smallest_id_this_fast_local_group];
+            retCmd += "se";
+            retCmd += block;
             retCmd += tmp_ip;
           }
+        }
+      } // place_method == OPT_S
+
+      if(place_method == OPT_R || (place_method == FLAT && compact_local_group_id * r_c <= blk_id && blk_id < compact_local_group_id * r_c + (delta - 1) * g)) {
+        if(fast_local_group_id % delta == 0) {
+          int dest_parity_id = k + fast_local_group_id / delta;
+          tmp_blk = stripe_blks[dest_parity_id];
+          tmp_ip = blk_IPs[dest_parity_id];
+          retCmd += "se";
+          retCmd += block;
+          if(place_method == OPT_R) {
+            // in Opt-R, D0, D1, send blocks to L0
+            retCmd += tmp_ip;
+          } else {
+            // in Flat, D0, D1, send blocks to the gateway
+            retCmd += gw_ip;
+          }
+        } else {
           int reserved_parity_id = fast_local_group_id + k;
           tmp_blk = reserved_blks[reserved_parity_id];
           tmp_ip = reserved_IPs[reserved_parity_id];
           retCmd += "se";
           retCmd += block;
-          //retCmd += tmp_ip;
-          retCmd += gw_ip;
-
-          if(delta - 2 > 0) {
-          if(gw_cmd[0] == '\0') {
-            string gw_cmd_str = "ga";
-            gw_cmd_str += to_string((delta - 2) * l_c);
-            gw_cmd_str += "wa";
-            gw_cmd_str += to_string(1);
-            gw_cmd_str += block_ip;
-            gw_cmd_str += "se";
-            gw_cmd_str += tmp_ip;
-            strcpy(gw_cmd, (char*)gw_cmd_str.c_str());
+          if(place_method == OPT_R) {
+            // in Opt-R, D2, D3, send blocks to L1
+            // in Opt-R, D4, D5, send blocks to L2
+            retCmd += tmp_ip;
           } else {
-            string gw_cmd_str = "wa";
-            gw_cmd_str += to_string(1);
-            gw_cmd_str += block_ip;
-            gw_cmd_str += "se";
-            gw_cmd_str += tmp_ip;
-            strcat(gw_cmd, (char*)gw_cmd_str.c_str());
+            // in Flat, D2, D3, send blocks to the gateway
+            // in Flat, D4, D5, send blocks to the gateway
+            retCmd += gw_ip;
           }
-          }
-        } else {
-          tmp_blk = stripe_blks[smallest_id_this_fast_local_group];
-          tmp_ip = blk_IPs[smallest_id_this_fast_local_group];
-          retCmd += "se";
-          retCmd += block;
+        }
+      } // place_method == OPT_R || place_method == FLAT
+
+    } else if (blk_id < k + l_c) {
+    // compact local parity block
+      retCmd += "lp";
+      int compact_local_group_id = blk_id - k;
+      int fast_local_group_id = compact_local_group_id * delta;
+      retCmd += "wa";
+      retCmd += to_string(r_f);
+      retCmd += "blk";
+
+      string gw_waited_block_ip_concated_str = "";
+      for(int idx = fast_local_group_id * r_f; idx < fast_local_group_id * r_f + r_f; ++idx) {
+        tmp_blk = stripe_blks[idx];
+        tmp_ip = blk_IPs[idx];
+        if(place_method != FLAT) {
+          // in Opt-S and Opt-R, L0 waits for D0, D1
           retCmd += tmp_ip;
+        } else {
+          // in Flat, L0 waits for blocks from the gateway
+          retCmd += gw_ip;
+          gw_waited_block_ip_concated_str += tmp_ip;
         }
       }
-    } // place_method == OPT_S
-    if(place_method == OPT_R || (place_method == FLAT && compact_local_group_id * r_c <= blk_id && blk_id < compact_local_group_id * r_c + (delta - 1) * g)) {
-      if(fast_local_group_id % delta == 0) {
-        int dest_parity_id = k + fast_local_group_id / delta;
-        tmp_blk = stripe_blks[dest_parity_id];
-        tmp_ip = blk_IPs[dest_parity_id];
-        retCmd += "se";
-        retCmd += block;
-        if(place_method == OPT_R) {
-          retCmd += tmp_ip;
+
+      if(place_method == FLAT) {
+        // in Flat, gateway command
+        if(gw_cmd[0] == '\0') {
+          string gw_cmd_str = "ga";
+          gw_cmd_str += to_string(l_f - l_c);
+          gw_cmd_str += "wa";
+          gw_cmd_str += to_string(r_f);
+          gw_cmd_str += gw_waited_block_ip_concated_str;
+          gw_cmd_str += "se";
+          gw_cmd_str += block_ip;
+          strcpy(gw_cmd, (char*)gw_cmd_str.c_str());
         } else {
-          retCmd += gw_ip;
+          string gw_cmd_str = "wa";
+          gw_cmd_str += to_string(r_f);
+          gw_cmd_str += gw_waited_block_ip_concated_str;
+          gw_cmd_str += "se";
+          gw_cmd_str += block_ip;
+          strcat(gw_cmd, (char*)gw_cmd_str.c_str());
         }
-      } else {
-        int reserved_parity_id = fast_local_group_id + k;
+      }
+
+      if(place_method == OPT_S || place_method == FLAT) {
+        // in Opt-S and Flat, L0 shoud be redirected to L2
+        retCmd += "st";
+        retCmd += "re";
+        int reserved_parity_id = fast_local_group_id + delta - 1 + k;
         tmp_blk = reserved_blks[reserved_parity_id];
         tmp_ip = reserved_IPs[reserved_parity_id];
         retCmd += "se";
         retCmd += block;
-        if(place_method == OPT_R) {
+        if(place_method == OPT_S) {
           retCmd += tmp_ip;
         } else {
           retCmd += gw_ip;
         }
+      } else if (place_method == OPT_R) {
+        retCmd += "castfi";
+        retCmd += block;
       }
-    } // place_method == OPT_R || place_method == FLAT
-  } else if (blk_id < k + l_c) {
-    // compact local parity
-    retCmd += "lp";
-    int compact_local_group_id = blk_id - k;
-    int fast_local_group_id = compact_local_group_id * delta;
-    retCmd += "wa";
-    retCmd += to_string(r_f);
-    retCmd += "blk";
+    }
 
-    string gw_waited_block_ip_concated_str = "";
-    for(int idx = fast_local_group_id * r_f; idx < fast_local_group_id * r_f + r_f; ++idx) {
-      tmp_blk = stripe_blks[idx];
-      tmp_ip = blk_IPs[idx];
-      if(place_method != FLAT) {
-        retCmd += tmp_ip;
-      } else {
-        retCmd += gw_ip;
-        gw_waited_block_ip_concated_str += tmp_ip;
-      }
-    }
-    if(place_method == FLAT) {
-      if(gw_cmd[0] == '\0') {
-        string gw_cmd_str = "ga";
-        gw_cmd_str += to_string(l_f - l_c);
-        gw_cmd_str += "wa";
-        gw_cmd_str += to_string(r_f);
-        gw_cmd_str += gw_waited_block_ip_concated_str;
-        gw_cmd_str += "se";
-        gw_cmd_str += block_ip;
-        strcpy(gw_cmd, (char*)gw_cmd_str.c_str());
-      } else {
-        string gw_cmd_str = "wa";
-        gw_cmd_str += to_string(r_f);
-        gw_cmd_str += gw_waited_block_ip_concated_str;
-        gw_cmd_str += "se";
-        gw_cmd_str += block_ip;
-        strcat(gw_cmd, (char*)gw_cmd_str.c_str());
-      }
-    }
-    if(place_method == OPT_S || place_method == FLAT) {
-      retCmd += "st";
-      retCmd += "re";
-      int reserved_parity_id = fast_local_group_id + delta - 1 + k;
-      tmp_blk = reserved_blks[reserved_parity_id];
-      tmp_ip = reserved_IPs[reserved_parity_id];
-      retCmd += "se";
-      retCmd += block;
-      if(place_method == OPT_S) {
-        retCmd += tmp_ip;
-      } else {
-        retCmd += gw_ip;
-      }
-    } else if (place_method == OPT_R) {
-      retCmd += "castfi";
-      retCmd += block;
-    }
-  }
-  } // end of if(reserved_id == -1)
+    return retCmd;
+}
 
-  if(blk_id == -1) {
+  // generate downcode command for L1, L2
+string Coordinator::generateDowncodeCmd4ReservedLP(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int reserved_id, string gw_ip, char* gw_cmd, char* gw_cmd_f) {
+    int r_c = k / l_c;
+    int r_f = k / l_f;
+    int delta = l_f / l_c;
+
+    string block;
+    string block_ip;
+    string reserved_block;
+    string reserved_ip;
+    string tmp_blk;
+    string tmp_ip;
+    string retCmd = "do";
+
     reserved_block = reserved_blks[reserved_id];
     reserved_ip = reserved_IPs[reserved_id];
-
     retCmd += "lp";
-
     int fast_local_group_id = reserved_id - k;
     int id = (fast_local_group_id / delta) * delta;
     int id2 = id + delta - 1;
     
     if(place_method == OPT_S && fast_local_group_id < id2) {
+      // in Opt-S, L1
       retCmd += "wa";
       retCmd += to_string(1);
       retCmd += "blk";
       int data_block_id = fast_local_group_id * r_f;
       tmp_blk = stripe_blks[data_block_id];
       tmp_ip = blk_IPs[data_block_id];
-      //retCmd += tmp_ip;
       retCmd += gw_ip;
 
       retCmd += "st";
@@ -1540,6 +1609,7 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       retCmd += reserved_block;
       retCmd += tmp_ip;
     } else if (place_method == OPT_S &&fast_local_group_id == id2) {
+      // in Opt-S, L2
       retCmd += "wa";
       retCmd += to_string(delta - 1);
       retCmd += "blk";
@@ -1555,7 +1625,8 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       retCmd += "castfi";
       retCmd += reserved_block;
     } // end of if place_method = OPT_S 
-     else if (place_method == OPT_R) {
+    else if (place_method == OPT_R) {
+      // in Opt-R, L1, L2
       retCmd += "wa";
       retCmd += to_string(r_f);
       retCmd += "blk";
@@ -1568,7 +1639,8 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       retCmd += "castfi";
       retCmd += reserved_block;
     } // end of if place_method == OPT_R
-     else if (place_method == FLAT && fast_local_group_id < id2) {
+    else if (place_method == FLAT && fast_local_group_id < id2) {
+      // in Flat, L1
       retCmd += "wa";
       retCmd += to_string(r_f);
       retCmd += "blk";
@@ -1578,7 +1650,6 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       for(int idx = start_data_block_id; idx < start_data_block_id + r_f; ++idx) {
         tmp_blk = stripe_blks[idx];
         tmp_ip = blk_IPs[idx];
-        //retCmd += tmp_ip;
         retCmd += gw_ip;
         gw_waited_block_ip_concated_str += tmp_ip;
       }
@@ -1608,9 +1679,10 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       tmp_ip = reserved_IPs[reserved_parity_id];
       retCmd += "se";
       retCmd += reserved_block;
-      //retCmd += tmp_ip;
       retCmd += gw_ip;
-    } else if (place_method == FLAT && fast_local_group_id == id2) {
+    } 
+    else if (place_method == FLAT && fast_local_group_id == id2) {
+      // in Flat, L2
       retCmd += "wa";
       retCmd += to_string(delta - 1);
       retCmd += "blk";
@@ -1619,25 +1691,23 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       int start_parity_id = id / delta + k;
       tmp_blk = stripe_blks[start_parity_id];
       tmp_ip = blk_IPs[start_parity_id];
-      //retCmd += tmp_ip;
       retCmd += gw_ip;
       gw_waited_block_ip_concated_str += tmp_ip;
       for(int idx = id + 1 + k; idx < id2 + k; ++idx) {
         tmp_blk = reserved_blks[idx];
         tmp_ip = reserved_IPs[idx];
-        //retCmd += tmp_ip;
         retCmd += gw_ip;
         gw_waited_block_ip_concated_str += tmp_ip;
       }
       
       if(gw_cmd_f[0] == '\0') {
-      string gw_cmd_str = to_string(l_c);
-      gw_cmd_str += "wa";
-      gw_cmd_str += to_string(delta - 1);
-      gw_cmd_str += gw_waited_block_ip_concated_str;
-      gw_cmd_str += "se";
-      gw_cmd_str += reserved_ip;
-      strcpy(gw_cmd_f, (char*)gw_cmd_str.c_str());
+        string gw_cmd_str = to_string(l_c);
+        gw_cmd_str += "wa";
+        gw_cmd_str += to_string(delta - 1);
+        gw_cmd_str += gw_waited_block_ip_concated_str;
+        gw_cmd_str += "se";
+        gw_cmd_str += reserved_ip;
+        strcpy(gw_cmd_f, (char*)gw_cmd_str.c_str());
       } else {
         string gw_cmd_str = "wa";
         gw_cmd_str += to_string(delta - 1);
@@ -1650,96 +1720,6 @@ string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], 
       retCmd += "castfi";
       retCmd += reserved_block;
     } // end of if place_method == FLAT
-  } // end of if(blk_id == -1)
 
-  return retCmd;
-}
-
-void Coordinator::showMetadata(){
-  meta->print();
-}
-
-void Coordinator::testSendCmd(){
-  Socket* cnSoc = new Socket();
-  string cmdStr = "decode";
-  string dnIP = "192.168.0.24";
-  cnSoc->sendData((char*)cmdStr.c_str(), cmdStr.length(), cmdStr.length(), (char*)dnIP.c_str(), DN_RECV_CMD_PORT);
-  delete cnSoc;
-}
-
-void Coordinator::testSendData(){
-  Socket* cnSoc = new Socket();
-  FILE* fp = fopen("/home/jhli/WUSI/myTest/wkb", "w");
-  if(fp == NULL) {
-    cout<<"open file error!"<<endl;
-    return;
-  }
-  int BUFSIZE = 1024*1024*64;
-  int packet_size = 1024*1024;
-  char* buf = (char*)malloc(sizeof(char)*BUFSIZE);
-  int write_len = 0;
-  int* mark_recv = new int[64];
-  //cnSoc->paraRecvData(DN_RECV_DATA_PORT, BUFSIZE, buf, 1, mark_recv, 64, packet_size, DATA_CHUNK, NULL);
-  cnSoc->paraRecvData(DN_RECV_DATA_PORT, buf, BUFSIZE, packet_size, 1, mark_recv, DATA_CHUNK, NULL);
-  write_len = fwrite(buf, 1, BUFSIZE, fp);
-  cout<<"write size: "<<write_len<<endl;
-  fclose(fp);
-  free(buf);
-  delete cnSoc;
-}
-
-void Coordinator::testMetadataFunctions(){
-  cout<<"default rack to dns:"<<endl;
-  set<string> tmpDNs = meta->getRack2DN("/default-rack");
-  set<string>::const_iterator tmpDNsIter;
-  for(tmpDNsIter = tmpDNs.begin(); tmpDNsIter != tmpDNs.end(); ++tmpDNsIter){
-    cout<<*tmpDNsIter<<endl;
-  }
-  cout<<"rack2 to dns:"<<endl;
-  tmpDNs = meta->getRack2DN("/rack2");
-  for(tmpDNsIter = tmpDNs.begin(); tmpDNsIter != tmpDNs.end(); ++tmpDNsIter){
-  cout<<*tmpDNsIter<<endl;
-  }
-  cout<<"rack3 to dns:"<<endl;
-  tmpDNs = meta->getRack2DN("/default-rack");
-  for(tmpDNsIter = tmpDNs.begin(); tmpDNsIter != tmpDNs.end(); ++tmpDNsIter){
-  cout<<*tmpDNsIter<<endl;
-}
-  cout<<"dn to rack:"<<endl;
-  cout<<meta->getDN2Rack("192.168.0.22")<<endl;
-  cout<<meta->getDN2Rack("192.168.0.23")<<endl;
-  cout<<meta->getDN2Rack("192.168.0.24")<<endl;
-  cout<<meta->getDN2Rack("192.168.0.25")<<endl;
-  cout<<meta->getDN2Rack("192.168.0.26")<<endl;
-  cout<<meta->getDN2Rack("192.168.0.27")<<endl;
-  cout<<meta->getDN2Rack("192.168.0.28")<<endl;
-  cout<<meta->getDN2Rack("192.168.0.30")<<endl;
-  cout<<"size of file /user/jhli/raidTest/WS: ";
-  cout<<meta->getFileSize("/user/jhli/raidTest/WS")<<endl;
-  cout<<"stripes of file /user/jhli/raidTest/WS: ";
-  set<string> tmpStripes = meta->getFile2Stripes("/user/jhli/raidTest/WS");
-  set<string>::const_iterator tmpStripesIter;
-  for(tmpStripesIter = tmpStripes.begin(); tmpStripesIter != tmpStripes.end(); ++tmpStripesIter){
-    cout<<*tmpStripesIter<<endl;
-  }
-  cout<<"file of stripe 1001: ";
-  cout<<meta->getStripe2File("1001")<<endl;
-  cout<<"file /user/jhli/raidTest/WS hot or not? ";
-  cout<<meta->isFileHot("/user/jhli/raidTest/WS")<<endl;
-
-  cout<<"blocks of stripe 1001: "<<endl;
-  set<pair<unsigned int, string>> tmpBlocks = meta->getStripe2Blocks("1001");
-  set<pair<unsigned int, string>>::const_iterator tmpBlocksIter;
-  for(tmpBlocksIter = tmpBlocks.begin(); tmpBlocksIter != tmpBlocks.end(); ++tmpBlocksIter){
-    cout<<(*tmpBlocksIter).first<<"->"<<(*tmpBlocksIter).second<<", ";
-  }
-  cout<<endl;
-  cout<<"stripe of blocks: "<<endl;
-  cout<<meta->getBlock2Stripe("blk_-3456848517900692274")<<endl;
-  cout<<meta->getBlock2Stripe("blk_-1791872972729302033")<<endl;
-  cout<<"IP of blocks: ";
-  cout<<meta->getBlock2IP("blk_-3456848517900692274")<<endl;
-  cout<<meta->getBlock2IP("blk_-1791872972729302033")<<endl;
-  cout<<"block index of first local parity block: ";
-  cout<<meta->getBlockIndexInStripe("blk_-1791872972729302033")<<endl;
+    return retCmd;
 }

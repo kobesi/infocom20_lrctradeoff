@@ -21,7 +21,7 @@ Datanode::Datanode(Config* config, Socket* cn2dnSocket, Socket* dn2dnSocket){
 Datanode::~Datanode(){
 }
 
-  // receive commands from CN
+  // receive commands from the CN
 int Datanode::recvCmd(char* cmd){
   int BUFSIZE = 1024;
   int cmd_length = cn2dnSoc->recvCmd(DN_RECV_CMD_PORT, BUFSIZE, cmd);
@@ -56,6 +56,7 @@ void Datanode::analyzeAndRespond(char* cmd, int cmd_length){
   }
 }
 
+  // analyze upload command
 void Datanode::analysisUploadCmd(char* cmd, int cmd_length){
   char* blk_nm = new char[blk_name_len + 1];
   for(int i = 2; i < cmd_length; ++i) {
@@ -77,7 +78,6 @@ void Datanode::analysisUploadCmd(char* cmd, int cmd_length){
   char* buf = new char[chunk_size];
   int packet_num = chunk_size / packet_size;
   int* mark_recv = new int[packet_num];
-  //cn2dnSoc->paraRecvData(CN_UP_DATA_PORT, chunk_size, buf, 1, mark_recv, packet_num, packet_size, DATA_CHUNK, NULL);
   cn2dnSoc->paraRecvData(CN_UP_DATA_PORT, buf, chunk_size, packet_size, 1, mark_recv, DATA_CHUNK, NULL);
   fwrite(buf, 1, chunk_size, fp);
   sendAck("write blk success");
@@ -92,6 +92,7 @@ void Datanode::analysisUploadCmd(char* cmd, int cmd_length){
   delete mark_recv;
 }
 
+  // analyze download command, may encounter block missing
 void Datanode::analysisDownloadCmd(char* cmd, int cmd_length){
   char* blk_nm = new char[blk_name_len + 1];
   for(int i = 2; i < cmd_length; ++i) {
@@ -124,8 +125,9 @@ void Datanode::analysisDownloadCmd(char* cmd, int cmd_length){
   }
 }
 
+  // after fixing block missing, ready to download again
 void Datanode::analysisReadyDownloadCmd(char* cmd, int cmd_length) {
-  // send data block
+  // send a data block
   char* buf = (char*)malloc(sizeof(char)*chunk_size);
   FILE* fp2 = fopen(data_blk_name, "r");
   if(fp2 != NULL) {
@@ -136,44 +138,50 @@ void Datanode::analysisReadyDownloadCmd(char* cmd, int cmd_length) {
   free(buf);
 }
 
+  // analyze directly send sub-command
+void Datanode::analysisDirectlySendCmd(char* newCmd, int newCmdLen) {
+  // [directly send a block to somewhere]
+  char* blk_nm = new char[blk_name_len];
+  for(int j = 0; j < blk_name_len; ++j) {
+    blk_nm[j] = newCmd[j + 4];
+  }
+  char* blk_loc = new char[data_path.length() + 1 + blk_name_len];
+  strcpy(blk_loc, data_path.c_str());
+  strcat(blk_loc, blk_nm);
+  blk_loc[data_path.length() + blk_name_len] = '\0';
+  char* redirect_ip = new char[ip_len + 1];
+  for(int j = 0; j < ip_len; ++j) {
+    redirect_ip[j] = newCmd[j + blk_name_len + 4];
+  }
+  redirect_ip[ip_len] = '\0';
+  char* buf = NULL; 
+  posix_memalign((void**)&buf, getpagesize(), chunk_size);
+  memset(buf, 0, sizeof(char)*chunk_size);
+  struct timeval start_time, end_time1, end_time2;
+  gettimeofday(&start_time, NULL);
+  int fd = open(blk_loc, O_RDONLY | O_DIRECT);
+  ssize_t ret = read(fd, buf, chunk_size);
+  close(fd);
+  gettimeofday(&end_time1, NULL);
+  cout<<"read size: "<<ret<<endl;
+  cout<<"file read time: "<<end_time1.tv_sec-start_time.tv_sec+(end_time1.tv_usec-start_time.tv_usec)*1.0/1000000<<endl;
+  dn2dnSoc->sendData(buf, chunk_size, packet_size, redirect_ip, DN_SEND_DATA_PORT);
+  gettimeofday(&end_time2, NULL);
+  cout<<"send time: "<<end_time2.tv_sec-end_time1.tv_sec+(end_time2.tv_usec-end_time1.tv_usec)*1.0/1000000<<endl;
+  delete blk_nm;
+  delete blk_loc;
+  delete redirect_ip;
+  free(buf);
+}
+
+  // analyze decode command
 void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
   if(newCmd[2] == 's' && newCmd[3] == 'e') {
-    char* blk_nm = new char[blk_name_len];
-    for(int j = 0; j < blk_name_len; ++j) {
-      blk_nm[j] = newCmd[j + 4];
-    }
-    char* blk_loc = new char[data_path.length() + 1 + blk_name_len];
-    strcpy(blk_loc, data_path.c_str());
-    strcat(blk_loc, blk_nm);
-    blk_loc[data_path.length() + blk_name_len] = '\0';
-    char* redirect_ip = new char[ip_len + 1];
-    for(int j = 0; j < ip_len; ++j) {
-      redirect_ip[j] = newCmd[j + blk_name_len + 4];
-    }
-    redirect_ip[ip_len] = '\0';
-    char* buf = NULL; 
-    posix_memalign((void**)&buf, getpagesize(), chunk_size);
-    //FILE* fp = fopen(blk_loc, "r");
-    //fread(buf, 1, chunk_size, fp);
-    struct timeval start_time, end_time1, end_time2;
-    gettimeofday(&start_time, NULL);
-    int fd = open(blk_loc, O_RDONLY | O_DIRECT);
-    ssize_t ret = read(fd, buf, chunk_size);
-    close(fd);
-    gettimeofday(&end_time1, NULL);
-    cout<<"read size: "<<ret<<endl;
-    cout<<"file read time: "<<end_time1.tv_sec-start_time.tv_sec+(end_time1.tv_usec-start_time.tv_usec)*1.0/1000000<<endl;
-    dn2dnSoc->sendData(buf, chunk_size, packet_size, redirect_ip, DN_SEND_DATA_PORT);
-    gettimeofday(&end_time2, NULL);
-    cout<<"send time: "<<end_time2.tv_sec-end_time1.tv_sec+(end_time2.tv_usec-end_time1.tv_usec)*1.0/1000000<<endl;
-    delete blk_nm;
-    delete blk_loc;
-    delete redirect_ip;
-    free(buf);
-    //fclose(fp);
+    analysisDirectlySendCmd(newCmd, newCmdLen);
 
   } else if(newCmd[2] == 'w' && newCmd[3] == 'a') {
-    // relayer
+    // [relayer]
+    // waited_blk_num: number of waited blocks
     int waited_blk_num = newCmd[4] - '0';
     char** waited_ips = new char*[waited_blk_num];
     int wait_gw_id = -1;
@@ -187,6 +195,7 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
         wait_gw_id = j;
       }
     }
+    // wait_gw_num: number of waited blocks from the gateway
     int wait_gw_num = 0;
     if(wait_gw_id != -1) {
       wait_gw_num = waited_blk_num - wait_gw_id;
@@ -196,9 +205,6 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
     posix_memalign((void**)&buf, getpagesize(), chunk_size);
     memset(buf, 0, sizeof(char)*chunk_size);
     if(newCmd[waited_blk_num*ip_len + 8] == 's') {
-      //FILE* fp = fopen(data_blk_name, "r");
-      //fread(buf, 1, chunk_size, fp);
-      //fclose(fp);
       struct timeval time1, time2;
       gettimeofday(&time1, NULL);
       int fd = open(data_blk_name, O_RDONLY | O_DIRECT);
@@ -208,8 +214,10 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
       cout<<"read size: "<<ret<<endl;
       cout<<"file read time: "<<time2.tv_sec-time1.tv_sec+(time2.tv_usec-time1.tv_usec)*1.0/1000000<<endl;
     }
+
     int* int_buf;
 
+    // [wait blocks from the same/ other racks/ clusters]
     struct timeval start_time, end_time1, end_time2, end_time3;
     gettimeofday(&start_time, NULL);
     int packet_num = chunk_size / packet_size;
@@ -219,16 +227,18 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
     }
     char* waited_buf = new char[chunk_size*waited_blk_num];
     int* int_waited_buf;
-    //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf, waited_blk_num - wait_gw_num, mark_recv, packet_num, packet_size, DATA_CHUNK, NULL);
-	dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num - wait_gw_num, mark_recv, DATA_CHUNK, NULL);
+    // 1st, wait blocks from the same rack/ cluster
+    dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num - wait_gw_num, mark_recv, DATA_CHUNK, NULL);
     if(wait_gw_num != 0) {
+      // 2rd, wait blocks from the gateway (other racks/ clusters) one by one
       for(int i = wait_gw_id; i < waited_blk_num; ++i) {
-        //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf + i*chunk_size, 1, mark_recv + i*packet_num, packet_num, packet_size, DATA_CHUNK, NULL);
-		dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf + i*chunk_size, chunk_size, packet_size, 1, mark_recv + i*packet_num, DATA_CHUNK, NULL);
+        dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf + i*chunk_size, chunk_size, packet_size, 1, mark_recv + i*packet_num, DATA_CHUNK, NULL);
       }
     }
     gettimeofday(&end_time1, NULL);
     cout<<"recv time: "<<end_time1.tv_sec-start_time.tv_sec+(end_time1.tv_usec-start_time.tv_usec)*1.0/1000000<<endl;
+ 
+    // [calculate an XOR sum based on the waited blocks]
     int cal_packet_num = 0;
     while(cal_packet_num < packet_num) {
       for(int j = 0; j < packet_num; ++j) {
@@ -240,7 +250,6 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
           }
         }
         if(can_cal_this_packet) {
-          // TODO, calculate here
           int_buf = (int*)(buf + j * packet_size);
           for(int o = 0; o < waited_blk_num; ++o) {
             int_waited_buf = (int*)(waited_buf + o * chunk_size + j * packet_size);
@@ -254,11 +263,12 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
             mark_recv[o*packet_num + j] = 0;
           }
         }
-      } // end of for packet
+      } // end of for j < packet_num
     } // end of while
     gettimeofday(&end_time2, NULL);
     cout<<"calculate time: "<<end_time2.tv_sec-end_time1.tv_sec+(end_time2.tv_usec-end_time1.tv_usec)*1.0/1000000<<endl;
 
+    // [re-send the XOR sum or store the XOR sum]
     if(newCmd[waited_blk_num*ip_len + 8] == 's') {
       char* redirect_ip = new char[ip_len + 1];
       for(int j = 0; j < ip_len; ++j) {
@@ -266,21 +276,20 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
       }
       redirect_ip[ip_len] = '\0';
       cout<<"XXXXXX redirected ip: "<<redirect_ip<<endl;
+      // re-send the XOR sum, stored in 'buf'
       dn2dnSoc->sendData(buf, chunk_size, packet_size, redirect_ip, DN_SEND_DATA_PORT);
       gettimeofday(&end_time3, NULL);
       cout<<"redirect time: "<<end_time3.tv_sec-end_time2.tv_sec+(end_time3.tv_usec-end_time2.tv_usec)*1.0/1000000<<endl;
       delete redirect_ip;
     } else if (newCmd[waited_blk_num*ip_len + 8] == 'r') {
-      //FILE* fp2 = fopen(data_blk_name, "w");
-      //fwrite(buf, 1, chunk_size, fp2);
-      //fclose(fp2);
+      // store the XOR sum
       int fd = open(data_blk_name,  O_CREAT | O_WRONLY | O_SYNC, 0755);
       ssize_t ret = write(fd, buf, chunk_size);
       close(fd);
       gettimeofday(&end_time3, NULL);
       cout<<"write size: "<<ret<<endl;
       cout<<"file write time: "<<end_time3.tv_sec-end_time2.tv_sec+(end_time3.tv_usec-end_time2.tv_usec)*1.0/1000000<<endl;
-      // respond "fi_deco"
+      // respond "fi_deco" to the coordinator
       sendAck("fi_deco");
       cout<<"*** send ack fi_deco"<<endl;
     }
@@ -294,125 +303,16 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
     delete waited_buf;
 
   }
+
 }
 
+  // analyze upcode command
 void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
   if(newCmd[2] == 's' && newCmd[3] == 'e') {
-    char* blk_nm = new char[blk_name_len];
-    for(int j = 0; j < blk_name_len; ++j) {
-      blk_nm[j] = newCmd[j + 4];
-    }
-    char* blk_loc = new char[data_path.length() + 1 + blk_name_len];
-    strcpy(blk_loc, data_path.c_str());
-    strcat(blk_loc, blk_nm);
-    blk_loc[data_path.length() + blk_name_len] = '\0';
-    char* redirect_ip = new char[ip_len + 1];
-    for(int j = 0; j < ip_len; ++j) {
-      redirect_ip[j] = newCmd[j + blk_name_len + 4];
-    }
-    redirect_ip[ip_len] = '\0';
-    char* buf = NULL;
-    posix_memalign((void**)&buf, getpagesize(), chunk_size);
-    //FILE* fp = fopen(blk_loc, "r");
-    //fread(buf, 1, chunk_size, fp);
-    struct timeval start_time, end_time1, end_time2;
-    gettimeofday(&start_time, NULL);
-    int fd = open(blk_loc, O_RDONLY | O_DIRECT);
-    ssize_t ret = read(fd, buf, chunk_size);
-    close(fd);
-    gettimeofday(&end_time1, NULL);
-    cout<<"read size: "<<ret<<endl;
-    cout<<"file read time: "<<end_time1.tv_sec-start_time.tv_sec+(end_time1.tv_usec-start_time.tv_usec)*1.0/1000000<<endl;
-    dn2dnSoc->sendData(buf, chunk_size, packet_size, redirect_ip, DN_SEND_DATA_PORT);
-    gettimeofday(&end_time2, NULL);
-    cout<<"send time: "<<end_time2.tv_sec-end_time1.tv_sec+(end_time2.tv_usec-end_time1.tv_usec)*1.0/1000000<<endl;
-    delete blk_nm;
-    delete blk_loc;
-    delete redirect_ip;
-    free(buf);
-    //fclose(fp);
+    analysisDirectlySendCmd(newCmd, newCmdLen);
 
-  } /*else if(newCmd[2] == 'w' && newCmd[3] == 'a') {
-    // relayer
-    int waited_blk_num = newCmd[4] - '0';
-    char** waited_ips = new char*[waited_blk_num];
-    for(int j = 0; j < waited_blk_num; ++j) {
-      waited_ips[j] = new char[ip_len + 1];
-      for(int o = 0; o < ip_len; ++o) {
-        waited_ips[j][o] = newCmd[j*ip_len + 8 + o];
-      }
-      waited_ips[j][ip_len] = '\0';
-    }
-
-    char* buf = (char*)malloc(sizeof(char)*chunk_size);
-    memset(buf, 0, sizeof(char)*chunk_size);
-    int* int_buf;
-
-    struct timeval start_time, end_time1, end_time2, end_time3;
-    gettimeofday(&start_time, NULL);
-    int packet_num = chunk_size / packet_size;
-    int* mark_recv = new int[packet_num*waited_blk_num];
-    for(int j = 0; j < packet_num*waited_blk_num; ++j) {
-      mark_recv[j] = -1;
-    }
-    char* waited_buf = new char[chunk_size*waited_blk_num];
-    int* int_waited_buf;
-    dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf, waited_blk_num, mark_recv, packet_num, packet_size, DATA_CHUNK, NULL);
-    gettimeofday(&end_time1, NULL);
-    cout<<"recv time: "<<end_time1.tv_sec-start_time.tv_sec+(end_time1.tv_usec-start_time.tv_usec)*1.0/1000000<<endl;
-    int cal_packet_num = 0;
-    while(cal_packet_num < packet_num) {
-      for(int j = 0; j < packet_num; ++j) {
-        bool can_cal_this_packet = true;
-        for(int o = 0; o < waited_blk_num; ++o) {
-          if(mark_recv[o*packet_num + j] != 1) {
-            can_cal_this_packet = false;
-            break;
-          }
-        }
-        if(can_cal_this_packet) {
-          // TODO, calculate here
-          int_buf = (int*)(buf + j * packet_size);
-          for(int o = 0; o < waited_blk_num; ++o) {
-            int_waited_buf = (int*)(waited_buf + o * chunk_size + j * packet_size);
-            for(int num = 0; num < (long long)(packet_size * sizeof(char) / sizeof(int)); ++num) {
-              int_buf[num] = int_buf[num] ^ int_waited_buf[num];
-            }
-          }
-
-          cal_packet_num++;
-          for(int o = 0; o < waited_blk_num; ++o) {
-            mark_recv[o*packet_num + j] = 0;
-          }
-        }
-      } // end of for packet
-    } // end of while
-    gettimeofday(&end_time2, NULL);
-    cout<<"calculate time: "<<end_time2.tv_sec-end_time1.tv_sec+(end_time2.tv_usec-end_time1.tv_usec)*1.0/1000000<<endl;
-
-    if(newCmd[waited_blk_num*ip_len + 8] == 's') {
-      char* redirect_ip = new char[ip_len + 1];
-      for(int j = 0; j < ip_len; ++j) {
-        redirect_ip[j] = newCmd[waited_blk_num*ip_len + blk_name_len + 10 + j];
-      }
-      redirect_ip[ip_len] = '\0';
-      cout<<"XXXXXX redirected ip: "<<redirect_ip<<endl;
-      dn2dnSoc->sendData(buf, chunk_size, packet_size, redirect_ip, DN_SEND_DATA_PORT);
-      gettimeofday(&end_time3, NULL);
-      cout<<"redirect time: "<<end_time3.tv_sec-end_time2.tv_sec+(end_time3.tv_usec-end_time2.tv_usec)*1.0/1000000<<endl;
-      delete redirect_ip;
-    }
-
-    for(int j = 0; j < waited_blk_num; ++j) {
-      delete waited_ips[j];
-    }
-    delete waited_ips;
-    free(buf);
-    delete mark_recv;
-    delete waited_buf;
-
-  } */else if(newCmd[2] == 'r' && newCmd[3] == 'e') {
-    // upcode happens
+  } else if(newCmd[2] == 'r' && newCmd[3] == 'e') {
+    // progressively break down and analyze the upcode command
     // "reco"
     char* blk_nm = new char[blk_name_len];
     for(int j = 0; j < blk_name_len; ++j) {
@@ -424,9 +324,7 @@ void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
     blk_loc[data_path.length() + blk_name_len] = '\0';
     char* buf = NULL;
     posix_memalign((void**)&buf, getpagesize(), chunk_size);
-    //FILE* fp = fopen(blk_loc, "r");
-    //fread(buf, 1, chunk_size, fp);
-    //fclose(fp);
+    memset(buf, 0, sizeof(char)*chunk_size);
     struct timeval start_time, end_time1, end_time2, end_time3, end_time4;
     gettimeofday(&start_time, NULL);
     int fd = open(blk_loc, O_RDONLY | O_DIRECT);
@@ -438,8 +336,10 @@ void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
     int* int_buf;
 
     // "wa"
+    // waited_blk_num: number of waited blocks
     int waited_blk_num = newCmd[blk_name_len + 8] - '0';
     // "blk"
+    // "ip1ip2..."
     char** waited_ips = new char*[waited_blk_num];
     int wait_gw_id = -1;
     for(int j = 0; j < waited_blk_num; ++j) {
@@ -452,11 +352,13 @@ void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
         wait_gw_id = j;
       }
     }
+    // wait_gw_num: number of waited blocks from the gateway
     int wait_gw_num = 0;
     if(wait_gw_id != -1) {
       wait_gw_num = waited_blk_num - wait_gw_id;
     }
 
+    // [L0 waits blocks from the L1 and L2]
     int packet_num = chunk_size / packet_size;
     int* mark_recv = new int[packet_num*waited_blk_num];
     for(int j = 0; j < packet_num*waited_blk_num; ++j) {
@@ -464,16 +366,18 @@ void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
     }
     char* waited_buf = new char[chunk_size*waited_blk_num];
     int* int_waited_buf;
-    //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf, waited_blk_num - wait_gw_num, mark_recv, packet_num, packet_size, DATA_CHUNK, NULL);
-	dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num - wait_gw_num, mark_recv, DATA_CHUNK, NULL);
+    // 1st, wait blocks from the same rack/ cluster
+    dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num - wait_gw_num, mark_recv, DATA_CHUNK, NULL);
     if(wait_gw_num != 0) {
       for(int i = wait_gw_id; i < waited_blk_num; ++i) {
-        //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf + i*chunk_size, 1, mark_recv + i*packet_num, packet_num, packet_size, DATA_CHUNK, NULL);
+        // 2rd, wait blocks from the gateway (other racks/ clusters) one by one
         dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf + i*chunk_size, chunk_size, packet_size, 1, mark_recv + i*packet_num, DATA_CHUNK, NULL);
       }
     }
     gettimeofday(&end_time2, NULL);
     cout<<"recv time: "<<end_time2.tv_sec-end_time1.tv_sec+(end_time2.tv_usec-end_time1.tv_usec)*1.0/1000000<<endl;
+ 
+    // [calculate L0' based on L0, L1 and L2]
     int cal_packet_num = 0;
     while(cal_packet_num < packet_num) {
       for(int j = 0; j < packet_num; ++j) {
@@ -485,7 +389,6 @@ void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
           }
         }
         if(can_cal_this_packet) {
-          // TODO, calculate here
           int_buf = (int*)(buf + j * packet_size);
           for(int o = 0; o < waited_blk_num; ++o) {
             int_waited_buf = (int*)(waited_buf + o * chunk_size + j * packet_size);
@@ -499,23 +402,21 @@ void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
             mark_recv[o*packet_num + j] = 0;
           }
         }
-      } // end of for packet
+      } // end of for j < packet
     } // end of while
     gettimeofday(&end_time3, NULL);
     cout<<"calculate time: "<<end_time3.tv_sec-end_time2.tv_sec+(end_time3.tv_usec-end_time2.tv_usec)*1.0/1000000<<endl;
 
+    // [finally, we write L0', stored in 'buf']
     if(remove(blk_loc) == 0) {
       cout<<"delete "<<blk_loc<<endl;
-      //FILE* fp2 = fopen(blk_loc, "w");
-      //fwrite(buf, 1, chunk_size, fp2);
-      //fclose(fp2);
       int fd = open(blk_loc, O_CREAT | O_WRONLY | O_SYNC, 0755);
       ssize_t ret = write(fd, buf, chunk_size);
       close(fd);
       gettimeofday(&end_time4, NULL);
       cout<<"write size: "<<ret<<endl;
       cout<<"file write time: "<<end_time4.tv_sec-end_time3.tv_sec+(end_time4.tv_usec-end_time3.tv_usec)*1.0/1000000<<endl;
-      // respond "fi_upco"
+      // respond "fi_upco" to the coordinator
       sendAck("fi_upco");
       cout<<"*** send ack fi_upco"<<endl;
     }
@@ -532,39 +433,24 @@ void Datanode::analysisUpcodeCmd(char* newCmd, int newCmdLen) {
     delete waited_buf;
 
   }
+
 }
 
+  // analyze downcode command
 void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
   if(newCmd[2] == 's' && newCmd[3] == 'e') {
-    char* blk_nm = new char[blk_name_len];
-    for(int j = 0; j < blk_name_len; ++j) {
-      blk_nm[j] = newCmd[j + 4];
-    }
-    char* blk_loc = new char[data_path.length() + 1 + blk_name_len];
-    strcpy(blk_loc, data_path.c_str());
-    strcat(blk_loc, blk_nm);
-    blk_loc[data_path.length() + blk_name_len] = '\0';
-    char* redirect_ip = new char[ip_len + 1];
-    for(int j = 0; j < ip_len; ++j) {
-      redirect_ip[j] = newCmd[j + blk_name_len + 4];
-    }
-    redirect_ip[ip_len] = '\0';
-    char* buf = NULL;
-    posix_memalign((void**)&buf, getpagesize(), chunk_size);
-    //FILE* fp = fopen(blk_loc, "r");
-    //fread(buf, 1, chunk_size, fp);
-    int fd = open(blk_loc, O_RDONLY | O_DIRECT);
-    ssize_t ret = read(fd, buf, chunk_size);
-    close(fd);
-    cout<<"read size: "<<ret<<endl;
-    dn2dnSoc->sendData(buf, chunk_size, packet_size, redirect_ip, DN_SEND_DATA_PORT);
-    delete blk_nm;
-    delete blk_loc;
-    delete redirect_ip;
-    free(buf);
-    //fclose(fp);
+    analysisDirectlySendCmd(newCmd, newCmdLen);
 
   } else if (newCmd[2] == 'w' && newCmd[3] == 'a') {
+    analysisDowncodeDataCmd(newCmd, newCmdLen);
+
+  } else if (newCmd[2] == 'l' && newCmd[3] == 'p') {
+    analysisDowncodeLPCmd(newCmd, newCmdLen);
+
+  }
+}
+
+void Datanode::analysisDowncodeDataCmd(char* newCmd, int newCmdLen) {
     // relayer
     // "wa"
     int waited_blk_num = newCmd[4] - '0';
@@ -590,15 +476,13 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
     char* buf = NULL;
     posix_memalign((void**)&buf, getpagesize(), chunk_size);
     memset(buf, 0, chunk_size);
-    //FILE* fp = fopen(blk_loc, "r");
-    //fread(buf, 1, chunk_size, fp);
-    //fclose(fp);
     int fd = open(blk_loc, O_RDONLY | O_DIRECT);
     ssize_t ret = read(fd, buf, chunk_size);
     close(fd);
     cout<<"read size: "<<ret<<endl;
     int* int_buf;
 
+    // [wait blocks]
     int packet_num = chunk_size / packet_size;
     int* mark_recv = new int[packet_num*waited_blk_num];
     for(int j = 0; j < packet_num*waited_blk_num; ++j) {
@@ -606,8 +490,9 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
     }
     char* waited_buf = new char[chunk_size*waited_blk_num];
     int* int_waited_buf;
-    //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf, waited_blk_num, mark_recv, packet_num, packet_size, DATA_CHUNK, NULL);
     dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num, mark_recv, DATA_CHUNK, NULL);
+
+    // [calculate]
     int cal_packet_num = 0;
     while(cal_packet_num < packet_num) {
       for(int j = 0; j < packet_num; ++j) {
@@ -619,7 +504,6 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
           }
         }
         if(can_cal_this_packet) {
-          // TODO, calculate here
           int_buf = (int*)(buf + j * packet_size);
           for(int o = 0; o < waited_blk_num; ++o) {
             int_waited_buf = (int*)(waited_buf + o * chunk_size + j * packet_size);
@@ -633,9 +517,10 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
             mark_recv[o*packet_num + j] = 0;
           }
         }
-      } // end of for packet
+      } // end of for j < packet_num
     } // end of while
 
+    // [re-send]
     char* redirect_ip = new char[ip_len + 1];
     for(int j = 0; j < ip_len; ++j) {
       redirect_ip[j] = newCmd[waited_blk_num*ip_len + blk_name_len + 10 + j];
@@ -655,8 +540,9 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
     delete blk_nm;
     delete blk_loc;
     delete redirect_ip;
+}
 
-  } else if (newCmd[2] == 'l' && newCmd[3] == 'p') {
+void Datanode::analysisDowncodeLPCmd(char* newCmd, int newCmdLen) {
     // "lp"
     // "wa"
     int waited_blk_num = newCmd[6] - '0';
@@ -695,12 +581,6 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
     posix_memalign((void**)&buf_se, getpagesize(), chunk_size);
     memset(buf_se, 0, sizeof(char)*chunk_size);
     if(newCmd[waited_blk_num*ip_len + 10] == 's' && newCmd[waited_blk_num*ip_len + 11] == 't' && newCmd[waited_blk_num*ip_len + 12] == 'r' && newCmd[waited_blk_num*ip_len + 13] == 'e') {
-      // "st"
-      // "re"
-      // "se"
-      //FILE* fp = fopen(blk_loc, "r");
-      //fread(buf_se, 1, chunk_size, fp);
-      //fclose(fp);
       int fd = open(blk_loc, O_RDONLY | O_DIRECT);
       ssize_t ret = read(fd, buf_se, chunk_size);
       close(fd);
@@ -715,14 +595,13 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
     }
     char* waited_buf = new char[chunk_size*waited_blk_num];
     int* int_waited_buf;
-    //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf, waited_blk_num - wait_gw_num, mark_recv, packet_num, packet_size, DATA_CHUNK, NULL);
     dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num - wait_gw_num, mark_recv, DATA_CHUNK, NULL);
     if(wait_gw_num != 0) {
       for(int i = wait_gw_id; i < waited_blk_num; ++i) {
-        //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf + i*chunk_size, 1, mark_recv + i*packet_num, packet_num, packet_size, DATA_CHUNK, NULL);
         dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf + i*chunk_size, chunk_size, packet_size, 1, mark_recv + i*packet_num, DATA_CHUNK, NULL);
       }
     }
+
     int cal_packet_num = 0;
     while(cal_packet_num < packet_num) {
       for(int j = 0; j < packet_num; ++j) {
@@ -734,7 +613,6 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
           }
         }
         if(can_cal_this_packet) {
-          // TODO, calculate here
           int_buf = (int*)(buf + j * packet_size);
           int_buf_se = (int*)(buf_se + j * packet_size);
           for(int o = 0; o < waited_blk_num; ++o) {
@@ -750,8 +628,8 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
             mark_recv[o*packet_num + j] = 0;
           }
         }
-      } // end of for packet
-    } // end of whil
+      } // end of for j < packet_num
+    } // end of while
 
     if(newCmd[waited_blk_num*ip_len + 10] == 's' && newCmd[waited_blk_num*ip_len + 11] == 't') {
       // "st" "re" "se"
@@ -769,18 +647,12 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
     if((fp2 = fopen(blk_loc, "r")) != NULL) {
       if(remove(blk_loc) == 0) {
         cout<<"delete "<<blk_loc<<endl;
-        //FILE* fp3 = fopen(blk_loc, "w");
-        //fwrite(buf, 1, chunk_size, fp3);
-        //fclose(fp3);
         int fd = open(blk_loc, O_CREAT | O_WRONLY | O_SYNC, 0755);
         ssize_t ret = write(fd, buf, chunk_size);
         close(fd);
         cout<<"write size: "<<ret<<endl;
       }
     } else {
-      //FILE* fp3 = fopen(blk_loc, "w");
-      //fwrite(buf, 1, chunk_size, fp3);
-      //fclose(fp3);
       int fd = open(blk_loc, O_CREAT | O_WRONLY | O_SYNC, 0755);
       ssize_t ret = write(fd, buf, chunk_size);
       close(fd);
@@ -795,7 +667,7 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
       // "st"
       // "fi"
 
-      // TODO, 190628, alleviate too many acks
+      // alleviate too many acks
       int delta = l_f / l_c;
       int ten = blk_nm[blk_name_len - 2] - '0';
       int single = blk_nm[blk_name_len - 1] - '0';
@@ -808,9 +680,6 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
           break;
         }
       }
-
-      //sendAck("fi_doco");
-      //cout<<"--- send ack fi_doco"<<endl;
     }
 
     delete blk_nm;
@@ -824,8 +693,6 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
     free(buf_se);
     delete mark_recv;
     delete waited_buf;
-
-  }
 }
 
 void Datanode::analysisGWCmd(char* newCmd, int newCmdLen) {
@@ -983,6 +850,7 @@ void Datanode::analysisGWCmd(char* newCmd, int newCmdLen) {
   delete resend_ips;
 }
 
+ // send ack to the coordinator
 void Datanode::sendAck(string ack){
   cn2dnSoc->sendData((char*)ack.c_str(), ack.length(), ack.length(), (char*)cn_ip.c_str(), CN_RECV_ACK_PORT);
 }

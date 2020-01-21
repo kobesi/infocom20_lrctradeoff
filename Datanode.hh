@@ -27,20 +27,34 @@ class Datanode{
     char* data_blk_name;
 
       // analyze the upload, download, upcode, and downcode commands
+      // analyze upload command
     void analysisUploadCmd(char* cmd, int cmd_length);
+      // analyze download command, may encounter block missing
     void analysisDownloadCmd(char* cmd, int cmd_length);
+      // after fixing block missing, ready to download again
     void analysisReadyDownloadCmd(char* cmd, int cmd_length);
+      // analyze decode command
     void analysisDecodeCmd(char* newCmd, int newCmdLen);
+      // analyze upcode command
     void analysisUpcodeCmd(char* newCmd, int newCmdLen);
+      // analyze downcode command
     void analysisDowncodeCmd(char* newCmd, int newCmdLen);
+    void analysisDowncodeDataCmd(char *newCmd, int newCmdLen);
+    void analysisDowncodeLPCmd(char *newCmd, int newCmdLen);
+      // analyze command sent to the gateway
     void analysisGWCmd(char* newCmd, int newCmdLen);
+
+      // analyze directly send sub-command
+    void analysisDirectlySendCmd(char* newCmd, int newCmdLen);
+
+      // send ack to the coordinator
     void sendAck(string ack);
 
   public:
     Datanode(Config*, Socket*, Socket*);
     ~Datanode();
 
-      // receive commands from CN
+      // receive commands from the CN
     int recvCmd(char* cmd);
 
       // analyze the commands and do the corresponding actions, and respond

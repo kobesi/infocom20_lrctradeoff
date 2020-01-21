@@ -44,6 +44,8 @@ class Coordinator{
     string generateDecodeCmd(string stripe_blks[], string blk_IPs[], int blk_id, int missing_ID, bool hot, string gw_ip, char* gw_cmd);
     string generateUpcodeCmd(string stripe_blks[], string blk_IPs[], int fast_local_parity_id, string gw_ip, char* gw_cmd);
     string generateDowncodeCmd(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int blk_id, int reserved_id, string gw_ip, char* gw_cmd, char* gw_cmd_f);
+    string generateDowncodeCmd4DataAndFastLP(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int blk_id, string gw_ip, char* gw_cmd);
+    string generateDowncodeCmd4ReservedLP(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int reserved_id, string gw_ip, char* gw_cmd, char* gw_cmd_f);
 
   public:
     Coordinator(Metadata*, Config*, Socket*, Socket*);
@@ -67,13 +69,13 @@ class Coordinator{
     map<int, string> decide_location(void);
 
       // different test functions
-    void showMetadata(void);
-    void testSendCmd(void);
-    void testSendData(void);
-    void testMetadataFunctions(void);
+      // test decode command
     void testDecodeCmd(int missing_ID);
+      // test upcode command
     void testUpcodeCmd(void);
+      // test upcode command when k = 12
     void testUpcodeCmd_k_12(void);
+      // test downcode command, when k = 12
     void testDowncodeCmd_k_12(void);
 };
 
