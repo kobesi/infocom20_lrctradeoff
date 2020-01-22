@@ -1,12 +1,12 @@
-In this file, we briefly introduce how to deploy and run the lrctradeoff prototype. More design details can be referred to our paper "Si Wu, Zhirong Shen, Patrick P. C. Lee, On the Optimal Repair-Scaling Trade-off in Locally Repairable Codes" which appears at InfoCom 2020. If you have any questions regarding the deployment and the code, please feel free to contact me at siwu5938@gmail.com.
+In this file, we briefly introduce how to deploy and run the lrctradeoff prototype. More design details can be referred to our paper "_Si Wu, Zhirong Shen, Patrick P. C. Lee_, On the Optimal Repair-Scaling Trade-off in Locally Repairable Codes" which appears at InfoCom 2020. If you have any questions regarding the deployment and the code, please feel free to contact me at siwu5938@gmail.com.
 
 ## 1. Files and Descriptions
 
 - Config.hh, Config.cc: the analysis of the configuration file.
 
-- Socket.hh, Socket.cc: the implementation of the network socket operations, including sending and receiving data over network.
+- Socket.hh, Socket.cc: the implementation of the network socket operations, including sending and receiving data over the network.
 
-- Metadata.hh, Metadata.cc: the implementation of metadata, including metadata write, read, and update.
+- Metadata.hh, Metadata.cc: the implementation of the metadata, including metadata write, read, and update.
 
 - Coordinator.hh, Coordinator.cc: the implementation of the Coordinator (CN), which sends commands to the Datanodes (DNs) and receives acks.
 
@@ -70,7 +70,7 @@ $ make
 
 After successfully make, you will find two executables namely LRCCN and LRCDN, which represent the CN and the DN, respectively.
 
-#### 3.2. Distribute the code to the DNs
+#### 3.2. Distribute the code package to the DNs
 
 You should first modify the dist.sh shell, and then running:
 
