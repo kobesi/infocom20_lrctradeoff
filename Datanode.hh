@@ -39,7 +39,9 @@ class Datanode{
     void analysisUpcodeCmd(char* newCmd, int newCmdLen);
       // analyze downcode command
     void analysisDowncodeCmd(char* newCmd, int newCmdLen);
+      // analyze downcode command for D2 in Opt-S, for example
     void analysisDowncodeDataCmd(char *newCmd, int newCmdLen);
+      // analyze downcode commands for local parity blocks
     void analysisDowncodeLPCmd(char *newCmd, int newCmdLen);
       // analyze command sent to the gateway
     void analysisGWCmd(char* newCmd, int newCmdLen);

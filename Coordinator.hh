@@ -1,3 +1,10 @@
+/*
+ * For better understanding of the code, especially how the coordinator 
+ * generates the decode/upcode/downcode commands, pls read the code while 
+ * referring to [[[Fig.4 in our infocom20 paper]]]. 
+ * We explain our code progressively using [[[Fig.4]]] as examples.
+ */
+ 
 #ifndef _COORDINATOR_H_H_H_
 #define _COORDINATOR_H_H_H_
 
@@ -26,8 +33,9 @@ class Coordinator{
     int packet_size;
     int place_method;
 
-      // send command and receive ack
+      // send command 
     void sendCmd(string cmd, string dest_IP);
+      // receive ack
     int recvAck(char* ack);
 
       // send a block when uploading, wait and receive ack
@@ -36,8 +44,11 @@ class Coordinator{
     void calculateLocalParityBlock(int local_blk_id, char** buf);
 
       // functions required for decode
+      // decide the local parity block id related to a missing data block
     int requiredLocalParityBlkID(int missing_ID, bool hot_tag);
+      // decide the start data block id of the local data set related to a missing data block
     int requiredStartDataBlkID(int missing_ID, bool hot_tag);
+      // decide the end data block id of the local data set related to a missing data block
     int requiredEndDataBlkID(int missing_ID, bool hot_tag);
 
       // generate commands for decode, upcode and downcode

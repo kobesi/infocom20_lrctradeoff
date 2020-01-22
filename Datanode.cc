@@ -217,7 +217,7 @@ void Datanode::analysisDecodeCmd(char* newCmd, int newCmdLen){
 
     int* int_buf;
 
-    // [wait blocks from the same/ other racks/ clusters]
+    // [wait blocks from the same rack/ cluster, other racks/ clusters]
     struct timeval start_time, end_time1, end_time2, end_time3;
     gettimeofday(&start_time, NULL);
     int packet_num = chunk_size / packet_size;
@@ -450,11 +450,13 @@ void Datanode::analysisDowncodeCmd(char* newCmd, int newCmdLen){
   }
 }
 
+  // analyze downcode command for D2 in Opt-S, for example
 void Datanode::analysisDowncodeDataCmd(char* newCmd, int newCmdLen) {
-    // relayer
     // "wa"
+	// waited_blk_num: number of waited blocks
     int waited_blk_num = newCmd[4] - '0';
     // "blk"
+	// "ip1ip2..."
     char** waited_ips = new char*[waited_blk_num];
     for(int j = 0; j < waited_blk_num; ++j) {
       waited_ips[j] = new char[ip_len + 1];
@@ -473,6 +475,7 @@ void Datanode::analysisDowncodeDataCmd(char* newCmd, int newCmdLen) {
     strcpy(blk_loc, data_path.c_str());
     strcat(blk_loc, blk_nm);
     blk_loc[data_path.length() + blk_name_len] = '\0';
+
     char* buf = NULL;
     posix_memalign((void**)&buf, getpagesize(), chunk_size);
     memset(buf, 0, chunk_size);
@@ -482,7 +485,7 @@ void Datanode::analysisDowncodeDataCmd(char* newCmd, int newCmdLen) {
     cout<<"read size: "<<ret<<endl;
     int* int_buf;
 
-    // [wait blocks]
+    // [wait blocks from the same rack/cluster]
     int packet_num = chunk_size / packet_size;
     int* mark_recv = new int[packet_num*waited_blk_num];
     for(int j = 0; j < packet_num*waited_blk_num; ++j) {
@@ -492,7 +495,7 @@ void Datanode::analysisDowncodeDataCmd(char* newCmd, int newCmdLen) {
     int* int_waited_buf;
     dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num, mark_recv, DATA_CHUNK, NULL);
 
-    // [calculate]
+    // [calculate an XOR sum based on the waited blocks]
     int cal_packet_num = 0;
     while(cal_packet_num < packet_num) {
       for(int j = 0; j < packet_num; ++j) {
@@ -520,7 +523,7 @@ void Datanode::analysisDowncodeDataCmd(char* newCmd, int newCmdLen) {
       } // end of for j < packet_num
     } // end of while
 
-    // [re-send]
+    // [re-send the XOR sum]
     char* redirect_ip = new char[ip_len + 1];
     for(int j = 0; j < ip_len; ++j) {
       redirect_ip[j] = newCmd[waited_blk_num*ip_len + blk_name_len + 10 + j];
@@ -542,11 +545,14 @@ void Datanode::analysisDowncodeDataCmd(char* newCmd, int newCmdLen) {
     delete redirect_ip;
 }
 
+  // analyze downcode commands for local parity blocks
 void Datanode::analysisDowncodeLPCmd(char* newCmd, int newCmdLen) {
     // "lp"
     // "wa"
+    // waited_blk_num: number of waited blocks
     int waited_blk_num = newCmd[6] - '0';
     // "blk"
+    // "ip1ip2..."
     char** waited_ips = new char*[waited_blk_num];
     int wait_gw_id = -1;
     for(int j = 0; j < waited_blk_num; ++j) {
@@ -559,6 +565,7 @@ void Datanode::analysisDowncodeLPCmd(char* newCmd, int newCmdLen) {
         wait_gw_id = j;
       }
     }
+    // wait_gw_num: number of waited blocks from the gateway
     int wait_gw_num = 0;
     if(wait_gw_id != -1) {
       wait_gw_num = waited_blk_num - wait_gw_id;
@@ -588,6 +595,7 @@ void Datanode::analysisDowncodeLPCmd(char* newCmd, int newCmdLen) {
     }
     int* int_buf_se;
 
+    // [wait blocks]
     int packet_num = chunk_size / packet_size;
     int* mark_recv = new int[packet_num*waited_blk_num];
     for(int j = 0; j < packet_num*waited_blk_num; ++j) {
@@ -595,13 +603,16 @@ void Datanode::analysisDowncodeLPCmd(char* newCmd, int newCmdLen) {
     }
     char* waited_buf = new char[chunk_size*waited_blk_num];
     int* int_waited_buf;
+    // 1st, wait blocks from the same rack/ cluster
     dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num - wait_gw_num, mark_recv, DATA_CHUNK, NULL);
     if(wait_gw_num != 0) {
       for(int i = wait_gw_id; i < waited_blk_num; ++i) {
+        // 2rd, wait blocks from the gateway (other racks/ clusters) one by one
         dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf + i*chunk_size, chunk_size, packet_size, 1, mark_recv + i*packet_num, DATA_CHUNK, NULL);
       }
     }
 
+    // [calculate based on the wait and received blocks]
     int cal_packet_num = 0;
     while(cal_packet_num < packet_num) {
       for(int j = 0; j < packet_num; ++j) {
@@ -695,17 +706,19 @@ void Datanode::analysisDowncodeLPCmd(char* newCmd, int newCmdLen) {
     delete waited_buf;
 }
 
+  // analyze command sent to the gateway
 void Datanode::analysisGWCmd(char* newCmd, int newCmdLen) {
-  int round = newCmd[2] - '0';
+  int round = newCmd[2] - '0'; // for example, in Fig.4 in paper, when upcoding, round = l_c = 2
   int offset = 3;
-  int waited_blk_num_per_round = newCmd[5] - '0';
-  int waited_blk_num = round * waited_blk_num_per_round;
+  int waited_blk_num_per_round = newCmd[5] - '0'; // for example, in Fig.4 in paper, when upcoding, L0 waits for L1 and L2, then waited_blk_num_per_round = 2
+  int waited_blk_num = round * waited_blk_num_per_round; // for example, in Fig.4 in paper, when upcoding, waited_blk_num = 4
   int cmd_length_per_round = 3 + ip_len * waited_blk_num_per_round + 2 + ip_len;
-  char** waited_ips = new char*[waited_blk_num];
-  char** resend_ips = new char*[round];
+  char** waited_ips = new char*[waited_blk_num]; // source ips
+  char** resend_ips = new char*[round]; // destination ips, all these constitute a relayer/ re-send manner !
   cout<<"round: "<<round<<endl;
   cout<<"waited_blk_num_per_round: "<<waited_blk_num_per_round<<endl;
   cout<<"cmd_length_per_round: "<<cmd_length_per_round<<endl;
+
   for(int i = 0; i < round; ++i) {
     resend_ips[i] = new char[ip_len + 1];
     int start_offset = offset + cmd_length_per_round * i;
@@ -730,8 +743,9 @@ void Datanode::analysisGWCmd(char* newCmd, int newCmdLen) {
     }
     cout<<"resend: ";
     cout<<"   "<<resend_ips[i]<<endl;
-  }
+  } // end of for
 
+  // wait data
   int packet_num = chunk_size / packet_size;
   int* mark_recv = new int[packet_num*waited_blk_num];
   for(int j = 0; j < packet_num*waited_blk_num; ++j) {
@@ -743,9 +757,9 @@ void Datanode::analysisGWCmd(char* newCmd, int newCmdLen) {
     source_IPs_recv_data[i] = new char[20];
   }
 
-  //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf, waited_blk_num, mark_recv, packet_num, packet_size, DATA_CHUNK, source_IPs_recv_data);
   dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_blk_num, mark_recv, DATA_CHUNK, source_IPs_recv_data);
 
+  // re-send data
   struct timeval start_time, end_time1;
   gettimeofday(&start_time, NULL);
   for(int index = 0; index < waited_blk_num; ++index) {
@@ -763,6 +777,7 @@ void Datanode::analysisGWCmd(char* newCmd, int newCmdLen) {
 
   offset += cmd_length_per_round * round;
   if(newCmd[offset] != '\0') {
+    // for further re-send
     int further_round = newCmd[offset] - '0';
     offset += 1;
     int num_per_round = newCmd[offset + 2] - '0';
@@ -798,43 +813,45 @@ void Datanode::analysisGWCmd(char* newCmd, int newCmdLen) {
       cout<<"   "<<r_ips[i]<<endl;
     }
 
-      int packet_num = chunk_size / packet_size;
-      int* mark_recv = new int[packet_num*waited_num];
-      for(int j = 0; j < packet_num*waited_num; ++j) {
-        mark_recv[j] = -1;
-      }
-      char** source_IPs_recv_data = new char*[waited_num];
-      for(int i = 0; i < waited_num; ++i) {
-        source_IPs_recv_data[i] = new char[20];
-      }
-      char* waited_buf = new char[chunk_size*waited_num];
-      //dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, chunk_size, waited_buf, waited_num, mark_recv, packet_num, packet_size, DATA_CHUNK, source_IPs_recv_data);
-      dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_num, mark_recv, DATA_CHUNK, source_IPs_recv_data);
-      for(int index = 0; index < waited_num; ++index) {
-        int i = 0;
-        for(; i < waited_num; ++i) {
-          if(strcmp(source_IPs_recv_data[index], w_ips[i]) == 0) {
-            break;
-          }
+    // wait data
+    int packet_num = chunk_size / packet_size;
+    int* mark_recv = new int[packet_num*waited_num];
+    for(int j = 0; j < packet_num*waited_num; ++j) {
+      mark_recv[j] = -1;
+    }
+    char** source_IPs_recv_data = new char*[waited_num];
+    for(int i = 0; i < waited_num; ++i) {
+      source_IPs_recv_data[i] = new char[20];
+    }
+    char* waited_buf = new char[chunk_size*waited_num];
+    dn2dnSoc->paraRecvData(DN_SEND_DATA_PORT, waited_buf, chunk_size, packet_size, waited_num, mark_recv, DATA_CHUNK, source_IPs_recv_data);
+
+    // re-send data 
+    for(int index = 0; index < waited_num; ++index) {
+      int i = 0;
+      for(; i < waited_num; ++i) {
+        if(strcmp(source_IPs_recv_data[index], w_ips[i]) == 0) {
+          break;
         }
-        int resend_i = i / num_per_round;
-        dn2dnSoc->sendData(waited_buf + index * chunk_size, chunk_size, packet_size, r_ips[resend_i], DN_SEND_DATA_PORT);
       }
+      int resend_i = i / num_per_round;
+      dn2dnSoc->sendData(waited_buf + index * chunk_size, chunk_size, packet_size, r_ips[resend_i], DN_SEND_DATA_PORT);
+    }
 
-      delete waited_buf;
-      delete mark_recv;
-      for(int j = 0; j < waited_num; ++j) {
-        delete w_ips[j];
-        delete source_IPs_recv_data[j];
-      }
-      delete w_ips;
-      delete source_IPs_recv_data;
-      for(int j = 0; j < further_round; ++j) {
-        delete r_ips[j];
-      }
-      delete r_ips;
+    delete waited_buf;
+    delete mark_recv;
+    for(int j = 0; j < waited_num; ++j) {
+      delete w_ips[j];
+      delete source_IPs_recv_data[j];
+    }
+    delete w_ips;
+    delete source_IPs_recv_data;
+    for(int j = 0; j < further_round; ++j) {
+      delete r_ips[j];
+    }
+    delete r_ips;
 
-  } // end of if '\0'
+  } // end of if newCmd[offset] != '\0'
 
   for(int i = 0; i < waited_blk_num; ++i) {
     delete waited_ips[i];

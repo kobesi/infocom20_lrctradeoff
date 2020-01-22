@@ -1,3 +1,10 @@
+/*
+ * For better understanding of the code, especially how the coordinator 
+ * generates the decode/upcode/downcode commands, pls read the code while 
+ * referring to [[[Fig.4 in our infocom20 paper]]]. 
+ * We explain our code progressively using [[[Fig.4]]] as examples.
+ */
+
 #include "Coordinator.hh"
 
 Coordinator::Coordinator(Metadata* newMeta, Config* config, Socket* cn2dnSocket, Socket* dn2dnSocket){
@@ -17,11 +24,12 @@ Coordinator::Coordinator(Metadata* newMeta, Config* config, Socket* cn2dnSocket,
 Coordinator::~Coordinator(){
 }
 
-  // send command and receive ack
+  // send command 
 void Coordinator::sendCmd(string cmd, string dest_IP){
   cn2dnSoc->sendData((char*)cmd.c_str(), cmd.length(), cmd.length(), (char*)dest_IP.c_str(), DN_RECV_CMD_PORT);
 }
 
+  // receive ack
 int Coordinator::recvAck(char* ack){
   int BUFSIZE = 1024;
   int ack_length = cn2dnSoc->recvCmd(CN_RECV_ACK_PORT, BUFSIZE, ack);
@@ -625,6 +633,7 @@ double Coordinator::downloadFile(string file, int sim_miss_id){
 }
 
   // functions required for decode
+  // decide the local parity block id related to a missing data block
 int Coordinator::requiredLocalParityBlkID(int missing_ID, bool hot_tag){
   int r_f = k / l_f;
   int r_c = k / l_c;
@@ -637,6 +646,7 @@ int Coordinator::requiredLocalParityBlkID(int missing_ID, bool hot_tag){
   return (tmpLocalParityBlkID + k);
 }
 
+  // decide the start data block id of the local data set related to a missing data block
 int Coordinator::requiredStartDataBlkID(int missing_ID, bool hot_tag){
   int r_f = k / l_f;
   int r_c = k / l_c;
@@ -650,6 +660,7 @@ int Coordinator::requiredStartDataBlkID(int missing_ID, bool hot_tag){
   }
 }
 
+  // decide the end data block id of the local data set related to a missing data block
 int Coordinator::requiredEndDataBlkID(int missing_ID, bool hot_tag){
   int r_f = k / l_f;
   int r_c = k / l_c;
@@ -698,7 +709,25 @@ void Coordinator::testDecodeCmd(int missing_ID){
   delete gw_cmd;
 }
 
-  // generate commands for decode
+  /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+   *                    generate commands for decode                     *
+   *                                                                     *
+   * e.g., in Fig.4 of our infocom20 paper, in the compact LRC,          *
+   * when D0 fails, D0 = L0' + D1 + D2 + D3 + D4 + D5,                   *
+   *                                                                     *
+   * 1) L0' and D1 will send blocks directly to D0 as they reside in     * 
+   * the same rack/ cluster,                                             *
+   *                                                                     *
+   * 2) D3 will send its content to D2. D2 will calculate an XOR sum of  *
+   * D2+D3, and then send D2+D3 to the gateway, which will re-send D2+D3 *
+   * to D0 (cross-cluster),                                              *
+   *                                                                     *
+   * 3) D5 will send its content to D4. D4 will calculate an XOR sum of  *
+   * D4+D5, and then send D4+D5 to the gateway, which will re-send D4+D5 *
+   * to D0 (cross-cluster),                                              *
+   *                                                                     *
+   * 4) D0 recomputes itself based on L0', D1, D2+D3, D4+D5              *
+   * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 string Coordinator::generateDecodeCmd(string stripe_blks[], string blk_IPs[], int blk_id, int missing_ID, bool hot, string gw_ip, char* gw_cmd){
   string block = stripe_blks[blk_id];
   string block_ip = blk_IPs[blk_id];
@@ -791,7 +820,7 @@ string Coordinator::generateDecodeCmd(string stripe_blks[], string blk_IPs[], in
   } else {
     if(rack == missing_block_rack) {
       // command for a block residing in the missing block's rack, but not 
-	  // the missing block, e.g., [D1 in Fig.4 in paper]
+      // the missing block, e.g., [D1 in Fig.4 in paper]
       // "se block missing_block_ip"
       retCmd += "se";
       retCmd += block;
@@ -1035,7 +1064,17 @@ void Coordinator::testUpcodeCmd_k_12(){
   delete gw_cmd;
 }
 
- // generate commands for upcode
+  /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+   *                    generate commands for upcode                     *
+   *                                                                     *
+   * e.g., in Fig.4 of our infocom20 paper, L0' = L0 + L1 + L2,          *
+   *                                                                     *
+   * Opt-S: L1 and L2 will send blocks directly to L0 as they reside in  * 
+   * the same rack/ cluster,                                             *
+   *                                                                     *
+   * Opt-R/ Flat: L1 and L2 will send blocks to the gateway,             *
+   * which will re-send the blocks to L0 (cross-cluster)                 *
+   * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 string Coordinator::generateUpcodeCmd(string stripe_blks[], string blk_IPs[], int fast_local_parity_id, string gw_ip, char* gw_cmd){
   //int k = 12; // (this is for testUpcodeCmd_k_12)
   //int l_f = 6; // (this is for testUpcodeCmd_k_12)
@@ -1115,7 +1154,7 @@ string Coordinator::generateUpcodeCmd(string stripe_blks[], string blk_IPs[], in
       retCmd += dest_ip;
     } else {
       // in Opt-R and Flat, L1, L2 send blocks to the gateway, 
-      // and the gateway re-send blocks to L0
+      // and the gateway re-sends blocks to L0
       retCmd += "se";
       retCmd += block;
       retCmd += gw_ip;
@@ -1145,7 +1184,7 @@ double Coordinator::downcodeFile(string file){
   int stripe_len = k + l_c + g;
   string temp_blocks[stripe_len];
   string temp_IPs[stripe_len];
-  // reserved blocks are for example, [L1, L2, L4, L5 in Fig.4]
+  // reserved blocks are for example, [L1, L2, L4, L5 in Fig.4 in paper]
   int reserved_len = k + l_f;
   string reserved_blocks[reserved_len];
   string reserved_IPs[reserved_len];
@@ -1283,7 +1322,7 @@ double Coordinator::downcodeFile(string file){
 
   // test downcode command, when k = 12
 void Coordinator::testDowncodeCmd_k_12(){
-  //place_method = FLAT;
+  //place_method = Opt-R;
   int k = 12;
   int l_f = 6;
   int l_c = 2;
@@ -1333,7 +1372,35 @@ void Coordinator::testDowncodeCmd_k_12(){
   delete gw_cmd;
 }
 
-  // generate commands for downcode
+  /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+   *                   generate commands for downcode                    *
+   *                                                                     *
+   * e.g., in Fig.4 of our infocom20 paper,                              *
+   *                                                                     *
+   * Opt-S:                                                              *
+   *   1) D0 and D1 will send blocks directly to L0 as they reside in    * 
+   * the same rack/ cluster,                                             *
+   *                                                                     *
+   *   2) D3 will send its content to D2. D2 will calculate an XOR sum of*
+   * D2+D3, and then send D2+D3 to the gateway, which will re-send D2+D3 *
+   * to L1 (cross-cluster),                                              *
+   *                                                                     *
+   *   3) L0 and L1 will send blocks to L0', which calculates L2 (L0,    *
+   *  L1, L0' are all in the same core rack/ cluter,                     *
+   *                                                                     *
+   * Opt-R:                                                              *
+   *   D0 and D1 send blocks inner-cluster to produce L0,                *
+   *   D2 and D3 send blocks inner-cluster to produce L1,                *
+   *   D4 and D5 send blocks inner-cluster to produce L2,                *
+   *                                                                     *
+   * Flat:                                                               *
+   *   1) D0 and D1 send blocks to the gateway, which redirects to L0 (  *
+   * cross-cluster),                                                     * 
+   *   2) D2 and D3 send blocks to the gateway, which redirects to L1 (  *
+   * cross-cluster),                                                     *
+   *   3) L0 and L1 send blocks to the gateway, which redirects to L0' ( *
+   * L2 = L0' + L0 + L2, cross-cluster)                                  *
+   * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 string Coordinator::generateDowncodeCmd(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int blk_id, int reserved_id, string gw_ip, char* gw_cmd, char* gw_cmd_f){
   //int k = 12; // (this is for testDowncodeCmd_k_12)
   //int l_f = 6; // (this is for testDowncodeCmd_k_12)
@@ -1419,8 +1486,7 @@ string Coordinator::generateDowncodeCmd4DataAndFastLP(string stripe_blks[], stri
           retCmd += tmp_ip;
         } else {
           if(blk_id == smallest_id_this_fast_local_group) {
-            // in Opt-S, D2 waits for D3, and re-send an XOR sum to the gateway
-            // in Opt-S, D4 waits for D5, and re-send an XOR sum to the gateway
+            // in Opt-S, D2 waits for D3, and re-sends an XOR sum (D2+D3) to the gateway
             retCmd += "wa";
             retCmd += to_string(r_f - 1);
             retCmd += "blk";
@@ -1438,8 +1504,7 @@ string Coordinator::generateDowncodeCmd4DataAndFastLP(string stripe_blks[], stri
 
             if(delta - 2 > 0) {
               // gateway command
-              // the gateway re-send D2 + D3 to L1
-              // the gateway re-send D4 + D5 to L2
+              // the gateway re-sends D2+D3 to L1
               if(gw_cmd[0] == '\0') {
                 string gw_cmd_str = "ga";
                 gw_cmd_str += to_string((delta - 2) * l_c);
@@ -1459,8 +1524,7 @@ string Coordinator::generateDowncodeCmd4DataAndFastLP(string stripe_blks[], stri
               }
             }
           } else {
-            // in Opt-S, D3 directly send its content to D2
-            // in Opt-S, D5 directly send its content to D4
+            // in Opt-S, D3 directly sends its content to D2
             tmp_blk = stripe_blks[smallest_id_this_fast_local_group];
             tmp_ip = blk_IPs[smallest_id_this_fast_local_group];
             retCmd += "se";
@@ -1496,14 +1560,13 @@ string Coordinator::generateDowncodeCmd4DataAndFastLP(string stripe_blks[], stri
             retCmd += tmp_ip;
           } else {
             // in Flat, D2, D3, send blocks to the gateway
-            // in Flat, D4, D5, send blocks to the gateway
             retCmd += gw_ip;
           }
         }
       } // place_method == OPT_R || place_method == FLAT
 
     } else if (blk_id < k + l_c) {
-    // compact local parity block
+      // compact local parity block
       retCmd += "lp";
       int compact_local_group_id = blk_id - k;
       int fast_local_group_id = compact_local_group_id * delta;
@@ -1569,7 +1632,7 @@ string Coordinator::generateDowncodeCmd4DataAndFastLP(string stripe_blks[], stri
     return retCmd;
 }
 
-  // generate downcode command for L1, L2
+  // generate downcode commands for L1, L2
 string Coordinator::generateDowncodeCmd4ReservedLP(string stripe_blks[], string blk_IPs[], string reserved_blks[], string reserved_IPs[], int reserved_id, string gw_ip, char* gw_cmd, char* gw_cmd_f) {
     int r_c = k / l_c;
     int r_f = k / l_f;
