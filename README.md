@@ -1,4 +1,4 @@
-In this file, we briefly introduce how to deploy and run the lrctradeoff prototype. More design details can be referred to our paper "_Si Wu, Zhirong Shen, Patrick P. C. Lee_, On the Optimal Repair-Scaling Trade-off in Locally Repairable Codes" which appears at InfoCom 2020. If you have any questions regarding the deployment and the code, please feel free to contact me at siwu5938@gmail.com.
+In this file, we briefly introduce how to deploy and run the lrctradeoff prototype. More design details can be referred to our paper "__Si Wu, Zhirong Shen, Patrick P. C. Lee__, On the Optimal Repair-Scaling Trade-off in Locally Repairable Codes" which appears at _InfoCom 2020_. If you have any questions regarding the deployment and the code, please feel free to contact me at siwu5938@gmail.com.
 
 ## 1. Files and Descriptions
 
